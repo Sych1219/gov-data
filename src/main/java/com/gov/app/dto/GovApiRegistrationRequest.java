@@ -63,7 +63,7 @@ public class GovApiRegistrationRequest {
         @NotBlank(message = "query parameter key is required")
         private String key;
 
-        private String value;
+        private String exampleValue;
 
         @NotNull(message = "query parameter type is required")
         private QueryParamType type;
@@ -86,15 +86,15 @@ public class GovApiRegistrationRequest {
             return children == null || children.isEmpty();
         }
 
-        @AssertTrue(message = "Leaf query params must provide a value while OBJECT entries cannot define one")
-        public boolean isValueValidForType() {
+        @AssertTrue(message = "Leaf query params must provide an exampleValue while OBJECT entries cannot define one")
+        public boolean isExampleValueValidForType() {
             if (type == null) {
                 return true;
             }
             if (type == QueryParamType.OBJECT) {
-                return value == null || value.isBlank();
+                return exampleValue == null || exampleValue.isBlank();
             }
-            return value != null && !value.isBlank();
+            return exampleValue != null && !exampleValue.isBlank();
         }
     }
 
@@ -105,8 +105,8 @@ public class GovApiRegistrationRequest {
         @NotBlank(message = "body parameter key is required")
         private String key;
 
-        @NotBlank(message = "body parameter value is required")
-        private String value;
+        @NotBlank(message = "body parameter exampleValue is required")
+        private String exampleValue;
 
         @NotNull(message = "body parameter type is required")
         private BodyParamType type;

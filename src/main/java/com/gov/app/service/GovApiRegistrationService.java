@@ -93,7 +93,7 @@ public class GovApiRegistrationService {
                     node.put("children", toQueryParamNode(param.getChildren()));
                 }
             } else {
-                node.put("value", param.getValue());
+                node.put("exampleValue", param.getExampleValue());
             }
             normalized.put(param.getKey(), node);
         }
@@ -112,7 +112,7 @@ public class GovApiRegistrationService {
             }
             Map<String, Object> node = new LinkedHashMap<>();
             node.put("type", param.getType().name());
-            node.put("value", param.getValue());
+            node.put("exampleValue", param.getExampleValue());
             if (param.getDescription() != null) {
                 node.put("description", param.getDescription());
             }
