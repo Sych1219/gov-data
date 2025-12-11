@@ -28,19 +28,19 @@
       "type": "OBJECT",
       "description": "Nested filter object",
       "children": [
-        {"key": "state", "value": "CA", "type": "STRING", "description": "US state abbreviation"}
+        {"key": "state", "exampleValue": "CA", "type": "STRING", "description": "US state abbreviation"}
       ]
     },
-    {"key": "per_page", "value": "50", "type": "INTEGER", "description": "Max results per page"}
+    {"key": "per_page", "exampleValue": "50", "type": "INTEGER", "description": "Max results per page"}
   ],
   "bodyParams": [
-    {"key": "payloadField", "value": "value-if-required-for-POST", "type": "STRING", "description": "Body field definition"}
+    {"key": "payloadField", "exampleValue": "value-if-required-for-POST", "type": "STRING", "description": "Body field definition"}
   ],
   "description": "Fetch school directory from Dept of Education"
 }
 ```
 
-Each entry in `queryParams` carries the metadata plus optional `children` so teams can model nested structures such as `filters[state]=CA`. Parent nodes use `type: OBJECT` and omit `value`; leaf nodes provide the actual `value`. `bodyParams` remain flat key/value definitions.
+Each entry in `queryParams` carries the metadata plus optional `children` so teams can model nested structures such as `filters[state]=CA`. Parent nodes use `type: OBJECT` and omit `exampleValue`; leaf nodes provide an `exampleValue`. `bodyParams` remain flat key/exampleValue definitions.
 
 ### 4. Validation Rules
 - `name`, `baseUrl`, `httpMethod` required.
@@ -48,7 +48,7 @@ Each entry in `queryParams` carries the metadata plus optional `children` so tea
 - `httpMethod` enum: `GET`, `POST`, `PUT`, `PATCH`, `DELETE`.
 - `headers`, `queryParams`, `bodyParams` optional arrays; reject duplicate keys inside each array.
 - `queryParams.type` enum `STRING|INTEGER|FLOAT|BOOLEAN|OBJECT`; `bodyParams.type` enum `STRING|INTEGER|FLOAT|BOOLEAN`. `description` free text for documentation (min 3 chars).
-- For nested query params, parent entries (`type: OBJECT`) may include `children` arrays; leaf entries must include `value`.
+- For nested query params, parent entries (`type: OBJECT`) may include `children` arrays; leaf entries must include `exampleValue`.
 
 ### 5. Response Contracts
 **Success 201**
