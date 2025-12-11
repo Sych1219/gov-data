@@ -8,9 +8,13 @@ import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
+import lombok.Getter;
+import lombok.Setter;
 
 import java.util.List;
 
+@Getter
+@Setter
 public class GovApiRegistrationRequest {
 
     @NotBlank(message = "name is required")
@@ -38,62 +42,8 @@ public class GovApiRegistrationRequest {
     @Size(min = 3, message = "description must be at least 3 characters")
     private String description;
 
-    public String getName() {
-        return name;
-    }
-
-    public void setName(String name) {
-        this.name = name;
-    }
-
-    public String getBaseUrl() {
-        return baseUrl;
-    }
-
-    public void setBaseUrl(String baseUrl) {
-        this.baseUrl = baseUrl;
-    }
-
-    public GovHttpMethod getHttpMethod() {
-        return httpMethod;
-    }
-
-    public void setHttpMethod(GovHttpMethod httpMethod) {
-        this.httpMethod = httpMethod;
-    }
-
-    public List<ApiHeader> getHeaders() {
-        return headers;
-    }
-
-    public void setHeaders(List<ApiHeader> headers) {
-        this.headers = headers;
-    }
-
-    public List<ApiQueryParam> getQueryParams() {
-        return queryParams;
-    }
-
-    public void setQueryParams(List<ApiQueryParam> queryParams) {
-        this.queryParams = queryParams;
-    }
-
-    public List<ApiBodyParam> getBodyParams() {
-        return bodyParams;
-    }
-
-    public void setBodyParams(List<ApiBodyParam> bodyParams) {
-        this.bodyParams = bodyParams;
-    }
-
-    public String getDescription() {
-        return description;
-    }
-
-    public void setDescription(String description) {
-        this.description = description;
-    }
-
+    @Getter
+    @Setter
     public static class ApiHeader implements KeyValueAware {
 
         @NotBlank(message = "header key is required")
@@ -104,32 +54,10 @@ public class GovApiRegistrationRequest {
 
         private String description;
 
-        @Override
-        public String getKey() {
-            return key;
-        }
-
-        public void setKey(String key) {
-            this.key = key;
-        }
-
-        public String getValue() {
-            return value;
-        }
-
-        public void setValue(String value) {
-            this.value = value;
-        }
-
-        public String getDescription() {
-            return description;
-        }
-
-        public void setDescription(String description) {
-            this.description = description;
-        }
     }
 
+    @Getter
+    @Setter
     public static class ApiQueryParam implements KeyValueAware {
 
         @NotBlank(message = "query parameter key is required")
@@ -146,47 +74,6 @@ public class GovApiRegistrationRequest {
         @Valid
         @NoDuplicateKeys(message = "Duplicate keys are not allowed inside query parameter children")
         private List<ApiQueryParam> children;
-
-        @Override
-        public String getKey() {
-            return key;
-        }
-
-        public void setKey(String key) {
-            this.key = key;
-        }
-
-        public String getValue() {
-            return value;
-        }
-
-        public void setValue(String value) {
-            this.value = value;
-        }
-
-        public QueryParamType getType() {
-            return type;
-        }
-
-        public void setType(QueryParamType type) {
-            this.type = type;
-        }
-
-        public String getDescription() {
-            return description;
-        }
-
-        public void setDescription(String description) {
-            this.description = description;
-        }
-
-        public List<ApiQueryParam> getChildren() {
-            return children;
-        }
-
-        public void setChildren(List<ApiQueryParam> children) {
-            this.children = children;
-        }
 
         @AssertTrue(message = "OBJECT query params must declare at least one child; other types cannot have children")
         public boolean isValidChildrenConfiguration() {
@@ -211,6 +98,8 @@ public class GovApiRegistrationRequest {
         }
     }
 
+    @Getter
+    @Setter
     public static class ApiBodyParam implements KeyValueAware {
 
         @NotBlank(message = "body parameter key is required")
@@ -225,37 +114,5 @@ public class GovApiRegistrationRequest {
         @Size(min = 3, message = "body parameter description must be at least 3 characters")
         private String description;
 
-        @Override
-        public String getKey() {
-            return key;
-        }
-
-        public void setKey(String key) {
-            this.key = key;
-        }
-
-        public String getValue() {
-            return value;
-        }
-
-        public void setValue(String value) {
-            this.value = value;
-        }
-
-        public BodyParamType getType() {
-            return type;
-        }
-
-        public void setType(BodyParamType type) {
-            this.type = type;
-        }
-
-        public String getDescription() {
-            return description;
-        }
-
-        public void setDescription(String description) {
-            this.description = description;
-        }
     }
 }

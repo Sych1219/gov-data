@@ -8,6 +8,7 @@ import com.gov.app.dto.GovApiRegistrationResponse;
 import com.gov.app.dto.QueryParamType;
 import com.gov.app.exception.ConflictException;
 import com.gov.app.repository.GovApiRegistrationRepository;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -18,15 +19,11 @@ import java.util.Map;
 import java.util.UUID;
 
 @Service
+@RequiredArgsConstructor
 public class GovApiRegistrationService {
 
     private final GovApiRegistrationRepository repository;
     private final ObjectMapper objectMapper;
-
-    public GovApiRegistrationService(GovApiRegistrationRepository repository, ObjectMapper objectMapper) {
-        this.repository = repository;
-        this.objectMapper = objectMapper;
-    }
 
     public GovApiRegistrationResponse register(GovApiRegistrationRequest request) {
         if (repository.existsByNameIgnoreCaseAndBaseUrl(request.getName(), request.getBaseUrl())) {

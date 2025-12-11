@@ -5,6 +5,7 @@ import com.gov.app.dto.GovApiRegistrationResponse;
 import com.gov.app.service.GovApiRegistrationService;
 import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -16,14 +17,11 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
 @RestController
+@RequiredArgsConstructor
 @RequestMapping(path = "/api/v1/gov/apis", produces = MediaType.APPLICATION_JSON_VALUE)
 public class GovApiRegistrationController {
 
     private final GovApiRegistrationService registrationService;
-
-    public GovApiRegistrationController(GovApiRegistrationService registrationService) {
-        this.registrationService = registrationService;
-    }
 
     @Operation(summary = "Register government public API")
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
