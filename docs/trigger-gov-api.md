@@ -1,22 +1,20 @@
 ## Trigger Gov Public API – Endpoint Design
 
 ### 1. Objective
-- Allow internal callers to execute a previously registered government public API using its `id`.
-- Use the stored metadata (base URL, HTTP method, headers, query/body parameter definitions) to construct a real HTTP request.
-- Accept runtime values for query/body parameters and optional header overrides, then proxy the call to the external API.
+- Enable internal callers to execute a previously registered government public API via its persisted `id`.
+- Reuse stored metadata (URL, method, headers, parameter schema) to build the outbound HTTP request.
+- Accept runtime parameter values, optional header overrides, and defaults logic so automation jobs can proxy the external API safely.
 
 ### 2. REST Endpoint
-| Item | Value |
-| --- | --- |
-| Path | `/api/v1/gov/apis/{apiId}/trigger` |
-| Method | `POST` |
-| Consumes | `application/json` |
-| Produces | `application/json` |
-
-- `apiId` is the UUID returned by the registration endpoint and maps to `gov_api_registration.id`.
+| Item | Value | Notes |
+| --- | --- | --- |
+| Path | `/api/v1/gov/apis/{apiId}/trigger` | `apiId` corresponds to `gov_api_registration.id`. |
+| Method | `POST` | Always POST because it initiates a trigger action. |
+| Consumes | `application/json` | Runtime payload with query/body/header overrides. |
+| Produces | `application/json` | Normalized response envelope. |
 
 ### 3. Request Model
-The trigger request focuses on passing runtime values that correspond to the metadata captured at registration time.
+Provide runtime parameter values that align with the metadata captured at registration time.
 
 ```json
 {
@@ -38,47 +36,17 @@ The trigger request focuses on passing runtime values that correspond to the met
 }
 ```
 
-- `query` is a generic JSON object whose structure should align with the tree defined in `GovApiRegistrationRequest.queryParams`:
-  - For `type = OBJECT` entries, clients send nested JSON objects.
-  - For non-OBJECT entries (STRING/INTEGER/FLOAT/BOOLEAN), clients send leaf values.
-  - Example: if registration defined an OBJECT `filters` with children `state`, `district`, then callers send `query.filters.state` and `query.filters.district`.
-- `body` is a JSON object whose fields should align with `GovApiRegistrationRequest.bodyParams` keys. Values are sent as strings and will be coerced according to the registered type where applicable.
-- `headerOverrides` is an optional flat map of header key/value pairs:
-  - Values here override headers defined at registration time with the same key.
-  - New headers not defined in registration can be added for observability, tracing, etc.
-- `useExampleDefaults`:
-  - When `true`, missing `query`/`body` fields will fall back to the `exampleValue` defined in the registration metadata where available.
-  - When `false`, only explicitly provided fields are sent downstream.
+- `query`: JSON tree that mirrors the registration `queryParams` definition (OBJECT nodes contain children, leaves carry scalar values).
+- `body`: Flat object whose keys match `bodyParams` metadata; values are coerced to registered types.
+- `headerOverrides`: Optional key/value map to override or extend stored headers (runtime wins on conflicts).
+- `useExampleDefaults`: When `true`, missing query/body keys inherit registration `exampleValue`s; when `false`, only explicitly supplied values are sent.
 
-### 4. Resolution & Invocation Flow
-1. **Load registration**
-   - Look up `gov_api_registration` by `apiId`.
-   - If not found, return `404 NOT_FOUND`.
-2. **Prepare outbound URL**
-   - Start from `base_url` stored in registration.
-   - Merge runtime `query` object with `query_params_json`:
-     - Validate that runtime keys exist in the metadata tree (or allow extra keys as a future enhancement).
-     - For nested OBJECT entries, flatten to `filters[state]=CA`, `filters[district]=San Francisco`, etc.
-     - Coerce runtime values to the registered `QueryParamType` when possible.
-     - Apply `useExampleDefaults`: if a key is missing in `query` but has an `exampleValue` in metadata, include it (unless `useExampleDefaults = false`).
-   - Build the final query string and append to `base_url`.
-3. **Prepare headers**
-   - Start from `headers_json` defined at registration.
-   - Overlay with `headerOverrides` (runtime wins on conflicts).
-   - Add platform headers (e.g. `X-Request-Id` if not provided, trace IDs, etc.).
-4. **Prepare request body**
-   - If registration `http_method` is `GET`, skip body.
-   - For `POST/PUT/PATCH`:
-     - Align runtime `body` with `body_params_json` definitions.
-     - Coerce values according to the registered type, where applicable.
-     - Apply `useExampleDefaults` logic similarly to query params.
-   - Serialize as JSON.
-5. **Execute outbound HTTP call**
-   - Use reactive `WebClient` or similar non-blocking client.
-   - Apply connect/read timeouts and retry policies at the client layer.
-6. **Build trigger response**
-   - Capture external HTTP status, headers (whitelisted), and response body.
-   - Return a normalized response envelope to the caller (see below).
+### 4. Validation Rules
+- `apiId` must be a valid UUID; malformed ids return `400`.
+- Validate runtime `query`/`body` keys against the registered schema; unknown keys are rejected (400) until future enhancement toggles.
+- Coerce values to registered types (INTEGER/FLOAT/BOOLEAN) and fail fast on parsing errors.
+- Enforce payload size limits for `query`, `body`, and downstream `responseBody`.
+- Respect `useExampleDefaults`: only auto-fill values when flag is `true` and metadata has `exampleValue`.
 
 ### 5. Response Contracts
 **Success 200**
@@ -125,34 +93,30 @@ The trigger request focuses on passing runtime values that correspond to the met
 }
 ```
 
-### 6. Validation Rules
-- `apiId` must be a valid UUID; if format is invalid, return 400.
-- When `useExampleDefaults = false`:
-  - Only keys present in `query`/`body` are used; unknown keys may be rejected (400) or ignored (configurable).
-- When `useExampleDefaults = true`:
-  - Keys missing in `query`/`body` but defined in metadata with an `exampleValue` are automatically included.
-- Runtime values should be checked against the registered type where feasible:
-  - INTEGER and FLOAT types must parse successfully.
-  - BOOLEAN values must be recognizable (`true/false`, `1/0`, etc.), or the call fails with 400.
-- Limit payload size for `query`, `body`, and `responseBody` (e.g. via Spring configuration) to protect against abuse.
+### 6. Persistence
+- This endpoint does not create new persistence records; it reads from `gov_api_registration` to resolve metadata and emits transient proxy calls.
+- Since no new data is stored, indexes/foreign keys beyond the existing registration PK are `N/A`.
 
-### 7. Error Handling
-- Use global `@ControllerAdvice` to map:
-  - Validation exceptions → 400.
-  - Missing registration → 404.
-  - Upstream timeouts, connection failures, or 5xx → 502 with `UPSTREAM_ERROR`.
-- Include `X-Request-Id` (either provided by caller or generated) in all responses for traceability.
-- Log full outbound request metadata (without secrets) and truncated response bodies for debugging.
+### 7. Processing Steps
+1. **Load registration**: Fetch `gov_api_registration` by `apiId`; if missing, return 404.
+2. **Prepare outbound URL**: Start from `base_url`, merge runtime query with metadata (flatten nested objects, apply defaults), and construct the query string.
+3. **Prepare headers**: Combine stored headers with `headerOverrides`, then append platform headers like correlation ids.
+4. **Prepare request body**: For non-GET registrations, merge runtime body with metadata defaults, coerce types, and serialize JSON.
+5. **Execute outbound HTTP call**: Invoke the remote API via `WebClient` (or equivalent) with timeout/retry policies.
+6. **Build trigger response**: Capture upstream status/body, wrap in normalized envelope, and return to caller.
 
-### 8. Swagger / OpenAPI
+### 8. Error Handling
+- Global `@ControllerAdvice` maps validation errors to 400, missing registrations to 404, and upstream failures/timeouts to 502 with `UPSTREAM_ERROR`.
+- Always include `X-Request-Id` (caller-supplied or generated) in responses for traceability.
+- Log outbound request metadata (without secrets) plus truncated response payloads for observability.
+
+### 9. Swagger / OpenAPI
 - Annotate controller method with `@Operation(summary = "Trigger registered government public API")`.
-- Document path parameter `apiId` and trigger request/response models.
-- Clarify the semantics of `useExampleDefaults`, `headerOverrides`, and how nested `query` objects map to registered `queryParams`.
+- Document the `apiId` path parameter and the trigger request schema, highlighting nested `query` behavior and `useExampleDefaults`.
+- Provide response examples for success, validation failure, 404, and upstream error scenarios.
 
-### 9. Future Enhancements
-- Support asynchronous trigger:
-  - Return 202 + job id.
-  - Process external call in background and persist result.
-- Allow selecting a subset of fields from upstream response (projection).
-- Add per-API rate limiting and circuit breaking configuration.
-- Allow per-request overrides for timeout and retry policies (within safe boundaries).
+### 10. Future Enhancements
+- Support asynchronous triggers (return 202 + job id, process in background, persist results).
+- Add projection support to request only specific response fields.
+- Introduce per-API rate limiting/circuit breaking knobs.
+- Allow per-request overrides for timeout/retry policies within safe bounds.
