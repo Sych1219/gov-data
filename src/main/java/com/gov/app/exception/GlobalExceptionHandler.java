@@ -8,8 +8,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
-import org.springframework.web.server.ServerWebInputException;
 import org.springframework.web.bind.support.WebExchangeBindException;
+import org.springframework.web.server.ServerWebInputException;
 import reactor.core.publisher.Mono;
 
 @RestControllerAdvice
@@ -45,9 +45,19 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.BAD_REQUEST, VALIDATION_ERROR, message);
     }
 
+    @ExceptionHandler(ValidationException.class)
+    public Mono<ResponseEntity<ErrorResponse>> handleTriggerValidation(ValidationException ex) {
+        return build(HttpStatus.BAD_REQUEST, VALIDATION_ERROR, ex.getMessage());
+    }
+
     @ExceptionHandler(ConflictException.class)
     public Mono<ResponseEntity<ErrorResponse>> handleConflict(ConflictException ex) {
         return build(HttpStatus.CONFLICT, "CONFLICT", ex.getMessage());
+    }
+
+    @ExceptionHandler(ApiRegistrationNotFoundException.class)
+    public Mono<ResponseEntity<ErrorResponse>> handleApiRegistrationNotFound(ApiRegistrationNotFoundException ex) {
+        return build(HttpStatus.NOT_FOUND, "API_NOT_FOUND", ex.getMessage());
     }
 
     @ExceptionHandler(NotFoundException.class)
@@ -58,6 +68,12 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(BusinessException.class)
     public Mono<ResponseEntity<ErrorResponse>> handleBusiness(BusinessException ex) {
         return build(HttpStatus.BAD_REQUEST, "BUSINESS_ERROR", ex.getMessage());
+    }
+
+    @ExceptionHandler(UpstreamException.class)
+    public Mono<ResponseEntity<ErrorResponse>> handleUpstream(UpstreamException ex) {
+        return Mono.just(ResponseEntity.status(HttpStatus.BAD_GATEWAY)
+                .body(new ErrorResponse("UPSTREAM_ERROR", ex.getMessage(), ex.getStatusCode())));
     }
 
     @ExceptionHandler(Exception.class)
