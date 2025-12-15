@@ -18,6 +18,10 @@ Use this template to author endpoint design specs so they stay consistent across
 ### 3. Request Model
 Provide a canonical JSON example covering headers, query params, body params, and descriptions. Include notes on optional nested structures (e.g., objects that expand into `children` arrays such as `filters`).
 
+Notes:
+- For `GET` endpoints, there is no request body; omit the `<bodyDefinition>` block entirely.
+- For body-capable methods (`POST|PUT|PATCH|DELETE` when applicable), include `<bodyDefinition>` as shown below.
+
 ```json
 {
   "<identifierField>": "<human readable name or code>",
