@@ -40,7 +40,7 @@
 }
 ```
 
-Each entry in `queryParams` carries the metadata plus optional `children` so teams can model nested structures such as `filters[state]=CA`. Parent nodes use `type: OBJECT` and omit `exampleValue`; leaf nodes provide an `exampleValue`. `bodyParams` remain flat key/exampleValue definitions.
+Each entry in `queryParams` carries the metadata plus optional `children` so teams can model nested structures such as `filters[state]=CA`. Parent nodes use `type: OBJECT` and omit `exampleValue`; leaf nodes may provide an `exampleValue` that can be used to generate sample requests. `bodyParams` remain flat key/exampleValue definitions.
 
 ### 4. Validation Rules
 - `name`, `baseUrl`, `httpMethod` required.
@@ -48,7 +48,7 @@ Each entry in `queryParams` carries the metadata plus optional `children` so tea
 - `httpMethod` enum: `GET`, `POST`, `PUT`, `PATCH`, `DELETE`.
 - `headers`, `queryParams`, `bodyParams` optional arrays; reject duplicate keys inside each array.
 - `queryParams.type` enum `STRING|INTEGER|FLOAT|BOOLEAN|OBJECT`; `bodyParams.type` enum `STRING|INTEGER|FLOAT|BOOLEAN`. `description` free text for documentation (min 3 chars).
-- For nested query params, parent entries (`type: OBJECT`) may include `children` arrays; leaf entries must include `exampleValue`.
+- For nested query params, parent entries (`type: OBJECT`) may include `children` arrays and must omit `exampleValue`; leaf entries may provide an `exampleValue` but it is optional.
 
 ### 5. Response Contracts
 **Success 201**

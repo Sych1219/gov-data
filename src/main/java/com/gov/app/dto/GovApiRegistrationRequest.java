@@ -86,7 +86,7 @@ public class GovApiRegistrationRequest {
             return children == null || children.isEmpty();
         }
 
-        @AssertTrue(message = "Leaf query params must provide an exampleValue while OBJECT entries cannot define one")
+        @AssertTrue(message = "OBJECT query params cannot define exampleValue")
         public boolean isExampleValueValidForType() {
             if (type == null) {
                 return true;
@@ -94,7 +94,7 @@ public class GovApiRegistrationRequest {
             if (type == QueryParamType.OBJECT) {
                 return exampleValue == null || exampleValue.isBlank();
             }
-            return exampleValue != null && !exampleValue.isBlank();
+            return true;
         }
     }
 
