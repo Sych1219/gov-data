@@ -53,7 +53,7 @@ public class GovApiRegistrationController {
 
     @Operation(summary = "Trigger registered government public API")
     @PostMapping(path = "/{apiId}/trigger", consumes = MediaType.APPLICATION_JSON_VALUE)
-    public Mono<ResponseEntity<GovApiTriggerResponse>> trigger(@PathVariable UUID apiId,
+    public Mono<ResponseEntity<GovApiTriggerResponse>> trigger(@PathVariable("apiId") UUID apiId,
                                                                @Valid @RequestBody GovApiTriggerRequest request,
                                                                ServerWebExchange exchange) {
         return Mono.fromCallable(() -> {
