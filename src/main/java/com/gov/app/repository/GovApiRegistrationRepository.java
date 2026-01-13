@@ -1,12 +1,12 @@
 package com.gov.app.repository;
 
 import com.gov.app.domain.GovApiRegistration;
-import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.r2dbc.repository.R2dbcRepository;
+import reactor.core.publisher.Mono;
 
 import java.util.UUID;
 
-public interface GovApiRegistrationRepository extends JpaRepository<GovApiRegistration, UUID>, JpaSpecificationExecutor<GovApiRegistration> {
+public interface GovApiRegistrationRepository extends R2dbcRepository<GovApiRegistration, UUID> {
 
-    boolean existsByNameIgnoreCaseAndBaseUrl(String name, String baseUrl);
+    Mono<Boolean> existsByNameIgnoreCaseAndBaseUrl(String name, String baseUrl);
 }

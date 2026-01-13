@@ -1,10 +1,8 @@
 package com.gov.app.domain;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
-import jakarta.persistence.UniqueConstraint;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.relational.core.mapping.Column;
+import org.springframework.data.relational.core.mapping.Table;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -17,37 +15,34 @@ import java.util.UUID;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-@Entity
-@Table(name = "gov_api_registration", uniqueConstraints = {
-        @UniqueConstraint(name = "uk_gov_api_registration_name_url", columnNames = {"name", "base_url"})
-})
+@Table("gov_api_registration")
 public class GovApiRegistration {
 
     @Id
-    @Column(nullable = false)
+    @Column("id")
     private UUID id;
 
-    @Column(nullable = false)
+    @Column("name")
     private String name;
 
-    @Column(name = "description")
+    @Column("description")
     private String description;
 
-    @Column(name = "base_url", nullable = false)
+    @Column("base_url")
     private String baseUrl;
 
-    @Column(name = "http_method", nullable = false)
+    @Column("http_method")
     private String httpMethod;
 
-    @Column(name = "headers_json", columnDefinition = "TEXT")
+    @Column("headers_json")
     private String headersJson;
 
-    @Column(name = "query_params_json", columnDefinition = "TEXT")
+    @Column("query_params_json")
     private String queryParamsJson;
 
-    @Column(name = "body_params_json", columnDefinition = "TEXT")
+    @Column("body_params_json")
     private String bodyParamsJson;
 
-    @Column(name = "created_at", nullable = false)
+    @Column("created_at")
     private Instant createdAt;
 }

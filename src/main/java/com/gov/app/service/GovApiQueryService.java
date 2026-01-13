@@ -9,13 +9,15 @@ import com.gov.app.dto.GovApiListResponse;
 import com.gov.app.exception.ValidationException;
 import com.gov.app.repository.GovApiRegistrationRepository;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
-import org.springframework.data.jpa.domain.Specification;
+import org.springframework.data.r2dbc.core.R2dbcEntityTemplate;
+import org.springframework.data.relational.core.query.Criteria;
+import org.springframework.data.relational.core.query.Query;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
+import reactor.core.publisher.Mono;
 
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -30,63 +32,78 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class GovApiQueryService {
 
-    private static final Sort DEFAULT_SORT = Sort.by(Sort.Direction.DESC, "createdAt");
+    private static final Sort DEFAULT_SORT = Sort.by(Sort.Direction.DESC, "created_at");
     private static final Map<String, String> SORT_FIELD_MAPPING = Map.of(
-            "createdAt", "createdAt",
+            "createdAt", "created_at",
             "name", "name",
-            "baseUrl", "baseUrl"
+            "baseUrl", "base_url"
     );
     private static final String STATUS_REGISTERED = "REGISTERED";
 
     private final GovApiRegistrationRepository repository;
+    private final R2dbcEntityTemplate r2dbcEntityTemplate;
     private final ObjectMapper objectMapper;
 
-    public GovApiListResponse search(UUID id,
-                                     String description,
-                                     int page,
-                                     int size,
-                                     String sort,
-                                     Map<String, String> rawFilters) {
+    public Mono<GovApiListResponse> search(UUID id,
+                                           String description,
+                                           int page,
+                                           int size,
+                                           String sort,
+                                           Map<String, String> rawFilters) {
         if (id != null) {
             return searchById(id);
         }
 
         String normalizedDescription = normalizeDescription(description);
 
-        Pageable pageable = PageRequest.of(page, size, resolveSort(sort));
-        Specification<GovApiRegistration> specification = buildSpecification(normalizedDescription, rawFilters);
+        Sort resolvedSort = resolveSort(sort);
+        Pageable pageable = PageRequest.of(page, size, resolvedSort);
+        Criteria criteria = buildCriteria(normalizedDescription, rawFilters);
 
-        Page<GovApiRegistration> result = repository.findAll(specification, pageable);
-        List<GovApiListItemResponse> items = result.getContent()
-                .stream()
+        Query query = Query.query(criteria)
+                .sort(resolvedSort)
+                .limit(pageable.getPageSize())
+                .offset(pageable.getOffset());
+
+        Mono<List<GovApiListItemResponse>> itemsMono = r2dbcEntityTemplate.select(query, GovApiRegistration.class)
                 .map(this::toListItem)
-                .toList();
+                .collectList();
 
-        return GovApiListResponse.builder()
-                .items(items)
-                .page(result.getNumber())
-                .size(result.getSize())
-                .totalItems(result.getTotalElements())
-                .totalPages(result.getTotalPages())
-                .build();
+        Mono<Long> totalMono = r2dbcEntityTemplate.count(Query.query(criteria), GovApiRegistration.class);
+
+        return Mono.zip(itemsMono, totalMono)
+                .map(tuple -> {
+                    List<GovApiListItemResponse> items = tuple.getT1();
+                    long totalItems = tuple.getT2();
+                    long totalPages = totalItems == 0 ? 0 : (long) Math.ceil((double) totalItems / pageable.getPageSize());
+
+                    return GovApiListResponse.builder()
+                            .items(items)
+                            .page(pageable.getPageNumber())
+                            .size(pageable.getPageSize())
+                            .totalItems(totalItems)
+                            .totalPages(totalPages)
+                            .build();
+                });
     }
 
-    private GovApiListResponse searchById(UUID id) {
-        List<GovApiListItemResponse> items = repository.findById(id)
+    private Mono<GovApiListResponse> searchById(UUID id) {
+        return repository.findById(id)
                 .map(this::toListItem)
                 .map(List::of)
-                .orElseGet(Collections::emptyList);
+                .defaultIfEmpty(Collections.emptyList())
+                .map(items -> {
+                    long totalItems = items.size();
+                    long totalPages = totalItems == 0 ? 0 : 1;
 
-        long totalItems = items.size();
-        long totalPages = totalItems == 0 ? 0 : 1;
-
-        return GovApiListResponse.builder()
-                .items(items)
-                .page(0)
-                .size(1)
-                .totalItems(totalItems)
-                .totalPages(totalPages)
-                .build();
+                    return GovApiListResponse.builder()
+                            .items(items)
+                            .page(0)
+                            .size(1)
+                            .totalItems(totalItems)
+                            .totalPages(totalPages)
+                            .build();
+                });
     }
 
     private Sort resolveSort(String sortParam) {
@@ -117,23 +134,21 @@ public class GovApiQueryService {
         return Sort.by(sortDirection, mappedField);
     }
 
-    private Specification<GovApiRegistration> buildSpecification(String description, Map<String, String> rawFilters) {
-        Specification<GovApiRegistration> specification = Specification.where(null);
+    private Criteria buildCriteria(String description, Map<String, String> rawFilters) {
+        Criteria criteria = Criteria.empty();
 
         if (StringUtils.hasText(description)) {
-            String lowered = description.toLowerCase(Locale.US);
-            specification = specification.and((root, query, cb) -> cb.like(cb.lower(root.get("description")), "%" + lowered + "%"));
+            criteria = criteria.and(Criteria.where("description").like("%" + description + "%"));
         }
 
         Map<String, String> filters = rawFilters != null ? rawFilters : Collections.emptyMap();
 
         String httpMethod = filters.get("httpMethod");
         if (StringUtils.hasText(httpMethod)) {
-            specification = specification.and((root, query, cb) -> cb.equal(cb.upper(root.get("httpMethod")),
-                    httpMethod.toUpperCase(Locale.US)));
+            criteria = criteria.and(Criteria.where("http_method").is(httpMethod.toUpperCase(Locale.US)));
         }
 
-        return specification;
+        return criteria;
     }
 
     private String normalizeDescription(String description) {

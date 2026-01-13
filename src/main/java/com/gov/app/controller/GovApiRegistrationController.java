@@ -27,7 +27,6 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Schedulers;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -46,8 +45,7 @@ public class GovApiRegistrationController {
     @Operation(summary = "Register government public API")
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
     public Mono<ResponseEntity<GovApiRegistrationResponse>> register(@Valid @RequestBody GovApiRegistrationRequest request) {
-        return Mono.fromCallable(() -> registrationService.register(request))
-                .subscribeOn(Schedulers.boundedElastic())
+        return registrationService.register(request)
                 .map(response -> ResponseEntity.status(HttpStatus.CREATED).body(response));
     }
 
@@ -56,11 +54,8 @@ public class GovApiRegistrationController {
     public Mono<ResponseEntity<GovApiTriggerResponse>> trigger(@PathVariable("apiId") UUID apiId,
                                                                @Valid @RequestBody GovApiTriggerRequest request,
                                                                ServerWebExchange exchange) {
-        return Mono.fromCallable(() -> {
-                    String requestId = resolveRequestId(exchange);
-                    return triggerService.trigger(apiId, request, requestId);
-                })
-                .subscribeOn(Schedulers.boundedElastic())
+        String requestId = resolveRequestId(exchange);
+        return triggerService.trigger(apiId, request, requestId)
                 .map(ResponseEntity::ok);
     }
 
@@ -77,11 +72,8 @@ public class GovApiRegistrationController {
                                                          int size,
                                                          @RequestParam(value = "sort", required = false) String sort,
                                                          ServerWebExchange exchange) {
-        return Mono.fromCallable(() -> {
-                    Map<String, String> filters = extractFilterParams(exchange);
-                    return queryService.search(id, description, page, size, sort, filters);
-                })
-                .subscribeOn(Schedulers.boundedElastic())
+        Map<String, String> filters = extractFilterParams(exchange);
+        return queryService.search(id, description, page, size, sort, filters)
                 .map(ResponseEntity::ok);
     }
 

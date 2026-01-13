@@ -48,61 +48,64 @@ public class GovApiTriggerService {
     private final ObjectMapper objectMapper;
     private final WebClient.Builder webClientBuilder;
 
-    public GovApiTriggerResponse trigger(UUID apiId, GovApiTriggerRequest request, String requestId) {
-        GovApiRegistration registration = repository.findById(apiId)
-                .orElseThrow(() -> new ApiRegistrationNotFoundException(apiId));
-        GovHttpMethod govMethod = GovHttpMethod.valueOf(registration.getHttpMethod());
+    public Mono<GovApiTriggerResponse> trigger(UUID apiId, GovApiTriggerRequest request, String requestId) {
+        return repository.findById(apiId)
+                .switchIfEmpty(Mono.error(new ApiRegistrationNotFoundException(apiId)))
+                .flatMap(registration -> {
+                    GovHttpMethod govMethod = GovHttpMethod.valueOf(registration.getHttpMethod());
 
-        boolean useDefaults = Boolean.TRUE.equals(request.getUseExampleDefaults());
-        Map<String, QueryParamDefinition> queryDefinitions = parseQueryDefinitions(registration.getQueryParamsJson());
-        Map<String, BodyParamDefinition> bodyDefinitions = parseBodyDefinitions(registration.getBodyParamsJson());
-        Map<String, String> storedHeaders = parseHeaders(registration.getHeadersJson());
+                    boolean useDefaults = Boolean.TRUE.equals(request.getUseExampleDefaults());
+                    Map<String, QueryParamDefinition> queryDefinitions = parseQueryDefinitions(registration.getQueryParamsJson());
+                    Map<String, BodyParamDefinition> bodyDefinitions = parseBodyDefinitions(registration.getBodyParamsJson());
+                    Map<String, String> storedHeaders = parseHeaders(registration.getHeadersJson());
 
-        Map<String, Object> runtimeQuery = request.getQuery();
-        Map<String, Object> runtimeBody = request.getBody();
+                    Map<String, Object> runtimeQuery = request.getQuery();
+                    Map<String, Object> runtimeBody = request.getBody();
 
-        if (runtimeQuery != null && queryDefinitions.isEmpty()) {
-            throw new ValidationException("Query payload is not allowed for this API");
-        }
-        if (runtimeBody != null && bodyDefinitions.isEmpty() && requiresBody(govMethod)) {
-            throw new ValidationException("Body payload is not allowed for this API");
-        }
-        if (!requiresBody(govMethod) && runtimeBody != null) {
-            throw new ValidationException("Body payload is not allowed for GET registration");
-        }
+                    if (runtimeQuery != null && queryDefinitions.isEmpty()) {
+                        return Mono.error(new ValidationException("Query payload is not allowed for this API"));
+                    }
+                    if (runtimeBody != null && bodyDefinitions.isEmpty() && requiresBody(govMethod)) {
+                        return Mono.error(new ValidationException("Body payload is not allowed for this API"));
+                    }
+                    if (!requiresBody(govMethod) && runtimeBody != null) {
+                        return Mono.error(new ValidationException("Body payload is not allowed for GET registration"));
+                    }
 
-        validateQueryKeys(queryDefinitions, runtimeQuery, "");
-        Map<String, String> queryPayload = buildQueryPayload(queryDefinitions, runtimeQuery, useDefaults);
-        enforcePayloadLimit("query", queryPayload, MAX_QUERY_BYTES);
+                    validateQueryKeys(queryDefinitions, runtimeQuery, "");
+                    Map<String, String> queryPayload = buildQueryPayload(queryDefinitions, runtimeQuery, useDefaults);
+                    enforcePayloadLimit("query", queryPayload, MAX_QUERY_BYTES);
 
-        Map<String, Object> bodyPayload = Collections.emptyMap();
-        boolean includeBody = requiresBody(govMethod);
-        if (includeBody) {
-            validateBodyKeys(bodyDefinitions, runtimeBody);
-            bodyPayload = buildBodyPayload(bodyDefinitions, runtimeBody, useDefaults);
-            enforcePayloadLimit("body", bodyPayload, MAX_BODY_BYTES);
-        }
+                    Map<String, Object> bodyPayload = Collections.emptyMap();
+                    boolean includeBody = requiresBody(govMethod);
+                    if (includeBody) {
+                        validateBodyKeys(bodyDefinitions, runtimeBody);
+                        bodyPayload = buildBodyPayload(bodyDefinitions, runtimeBody, useDefaults);
+                        enforcePayloadLimit("body", bodyPayload, MAX_BODY_BYTES);
+                    }
 
-        Map<String, String> headers = mergeHeaders(storedHeaders, request.getHeaderOverrides(), requestId);
+                    Map<String, String> headers = mergeHeaders(storedHeaders, request.getHeaderOverrides(), requestId);
 
-        UpstreamCallResult upstreamCallResult = invokeExternal(
-                HttpMethod.valueOf(govMethod.name()),
-                registration.getBaseUrl(),
-                queryPayload,
-                headers,
-                includeBody ? bodyPayload : null
-        );
-        JsonNode responseBody = toResponseNode(upstreamCallResult.body());
-        OffsetDateTime invokedAt = OffsetDateTime.now(ZoneOffset.UTC);
+                    return invokeExternal(
+                            HttpMethod.valueOf(govMethod.name()),
+                            registration.getBaseUrl(),
+                            queryPayload,
+                            headers,
+                            includeBody ? bodyPayload : null
+                    ).map(upstreamCallResult -> {
+                        JsonNode responseBody = toResponseNode(upstreamCallResult.body());
+                        OffsetDateTime invokedAt = OffsetDateTime.now(ZoneOffset.UTC);
 
-        return GovApiTriggerResponse.builder()
-                .status("SUCCESS")
-                .apiId(apiId)
-                .externalStatus(upstreamCallResult.status())
-                .invokedAt(invokedAt)
-                .requestId(requestId)
-                .responseBody(responseBody)
-                .build();
+                        return GovApiTriggerResponse.builder()
+                                .status("SUCCESS")
+                                .apiId(apiId)
+                                .externalStatus(upstreamCallResult.status())
+                                .invokedAt(invokedAt)
+                                .requestId(requestId)
+                                .responseBody(responseBody)
+                                .build();
+                    });
+                });
     }
 
     private boolean requiresBody(GovHttpMethod method) {
@@ -383,11 +386,11 @@ public class GovApiTriggerService {
         return merged;
     }
 
-    private UpstreamCallResult invokeExternal(HttpMethod method,
-                                              String baseUrl,
-                                              Map<String, String> query,
-                                              Map<String, String> headers,
-                                              Map<String, Object> body) {
+    private Mono<UpstreamCallResult> invokeExternal(HttpMethod method,
+                                                    String baseUrl,
+                                                    Map<String, String> query,
+                                                    Map<String, String> headers,
+                                                    Map<String, Object> body) {
         URI uri = buildUri(baseUrl, query);
         WebClient client = webClientBuilder
                 .exchangeStrategies(ExchangeStrategies.builder()
@@ -404,26 +407,22 @@ public class GovApiTriggerService {
             requestSpec.bodyValue(body);
         }
 
-        try {
-            return requestSpec.exchangeToMono(clientResponse ->
-                            clientResponse.bodyToMono(String.class)
-                                    .defaultIfEmpty("")
-                                    .flatMap(payload -> {
-                                        enforceResponseLimit(payload);
-                                        int status = clientResponse.statusCode().value();
-                                        if (clientResponse.statusCode().isError()) {
-                                            return Mono.error(new UpstreamException(
-                                                    "External API returned " + status, status));
-                                        }
-                                        return Mono.just(new UpstreamCallResult(status, payload));
-                                    }))
-                    .timeout(DEFAULT_TIMEOUT)
-                    .block();
-        } catch (UpstreamException ex) {
-            throw ex;
-        } catch (Exception ex) {
-            throw new UpstreamException("External API request failed: " + ex.getMessage(), 0);
-        }
+        return requestSpec.exchangeToMono(clientResponse ->
+                        clientResponse.bodyToMono(String.class)
+                                .defaultIfEmpty("")
+                                .flatMap(payload -> {
+                                    enforceResponseLimit(payload);
+                                    int status = clientResponse.statusCode().value();
+                                    if (clientResponse.statusCode().isError()) {
+                                        return Mono.error(new UpstreamException(
+                                                "External API returned " + status, status));
+                                    }
+                                    return Mono.just(new UpstreamCallResult(status, payload));
+                                }))
+                .timeout(DEFAULT_TIMEOUT)
+                .onErrorMap(ex -> ex instanceof UpstreamException
+                        ? ex
+                        : new UpstreamException("External API request failed: " + ex.getMessage(), 0));
     }
 
     private URI buildUri(String baseUrl, Map<String, String> query) {

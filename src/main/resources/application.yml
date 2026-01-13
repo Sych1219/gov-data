@@ -2,23 +2,10 @@ spring:
   application:
     name: gov-data
 
-  datasource:
-    url: jdbc:postgresql://172.17.0.6:5432/mydb
+  r2dbc:
+    url: r2dbc:postgresql://172.17.0.6:5432/mydb
     username: myuser
     password: mypass
-    driver-class-name: org.postgresql.Driver
-
-  jpa:
-    hibernate:
-      ddl-auto: update
-    properties:
-      hibernate:
-        dialect: org.hibernate.dialect.PostgreSQLDialect
-
-  sql:
-    init:
-      mode: always
-      schema-locations: classpath:schema.sql
 
 server:
   port: 8080

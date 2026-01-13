@@ -10,6 +10,7 @@ import com.gov.app.exception.ConflictException;
 import com.gov.app.repository.GovApiRegistrationRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import reactor.core.publisher.Mono;
 
 import java.time.Instant;
 import java.time.OffsetDateTime;
@@ -25,29 +26,32 @@ public class GovApiRegistrationService {
     private final GovApiRegistrationRepository repository;
     private final ObjectMapper objectMapper;
 
-    public GovApiRegistrationResponse register(GovApiRegistrationRequest request) {
-        if (repository.existsByNameIgnoreCaseAndBaseUrl(request.getName(), request.getBaseUrl())) {
-            throw new ConflictException("Registration already exists for the provided name and baseUrl");
-        }
+    public Mono<GovApiRegistrationResponse> register(GovApiRegistrationRequest request) {
+        return repository.existsByNameIgnoreCaseAndBaseUrl(request.getName(), request.getBaseUrl())
+                .flatMap(exists -> {
+                    if (Boolean.TRUE.equals(exists)) {
+                        return Mono.error(new ConflictException("Registration already exists for the provided name and baseUrl"));
+                    }
 
-        GovApiRegistration registration = new GovApiRegistration();
-        registration.setId(UUID.randomUUID());
-        registration.setName(request.getName());
-        registration.setDescription(request.getDescription());
-        registration.setBaseUrl(request.getBaseUrl());
-        registration.setHttpMethod(request.getHttpMethod().name());
-        registration.setHeadersJson(toJson(normalizeHeaders(request)));
-        registration.setQueryParamsJson(toJson(normalizeQueryParams(request)));
-        registration.setBodyParamsJson(toJson(normalizeBodyParams(request)));
-        registration.setCreatedAt(Instant.now());
+                    GovApiRegistration registration = new GovApiRegistration();
+                    registration.setId(UUID.randomUUID());
+                    registration.setName(request.getName());
+                    registration.setDescription(request.getDescription());
+                    registration.setBaseUrl(request.getBaseUrl());
+                    registration.setHttpMethod(request.getHttpMethod().name());
+                    registration.setHeadersJson(toJson(normalizeHeaders(request)));
+                    registration.setQueryParamsJson(toJson(normalizeQueryParams(request)));
+                    registration.setBodyParamsJson(toJson(normalizeBodyParams(request)));
+                    registration.setCreatedAt(Instant.now());
 
-        GovApiRegistration saved = repository.save(registration);
-        return new GovApiRegistrationResponse(
-                saved.getId(),
-                saved.getName(),
-                "REGISTERED",
-                OffsetDateTime.ofInstant(saved.getCreatedAt(), ZoneOffset.UTC)
-        );
+                    return repository.save(registration);
+                })
+                .map(saved -> new GovApiRegistrationResponse(
+                        saved.getId(),
+                        saved.getName(),
+                        "REGISTERED",
+                        OffsetDateTime.ofInstant(saved.getCreatedAt(), ZoneOffset.UTC)
+                ));
     }
 
     private Map<String, Object> normalizeHeaders(GovApiRegistrationRequest request) {
