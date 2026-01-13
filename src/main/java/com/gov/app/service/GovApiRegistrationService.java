@@ -34,7 +34,7 @@ public class GovApiRegistrationService {
                     }
 
                     GovApiRegistration registration = new GovApiRegistration();
-                    registration.setId(UUID.randomUUID());
+                    // registration.setId(UUID.randomUUID());
                     registration.setName(request.getName());
                     registration.setDescription(request.getDescription());
                     registration.setBaseUrl(request.getBaseUrl());
