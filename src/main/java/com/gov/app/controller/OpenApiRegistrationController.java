@@ -35,7 +35,7 @@ public class OpenApiRegistrationController {
 
         log.info("Received OpenAPI registration request. RequestId: {}", requestId);
 
-        // Validate specification
+        // Validate and parse specification
         String openApiJson = openApiSpec.toString();
         
         return Mono.fromCallable(() -> validationService.validate(openApiJson))
@@ -46,8 +46,12 @@ public class OpenApiRegistrationController {
                                 validationResult.getErrors()));
                     }
 
-                    // Register the API
-                    return registrationService.register(openApiJson);
+                    // Parse the validated specification
+                    return Mono.fromCallable(() -> validationService.parse(openApiJson));
+                })
+                .flatMap(parsedSpec -> {
+                    // Register the API with parsed data
+                    return registrationService.register(parsedSpec, openApiJson);
                 });
     }
 

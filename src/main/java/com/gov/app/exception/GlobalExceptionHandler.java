@@ -1,6 +1,7 @@
 package com.gov.app.exception;
 
 import com.gov.app.dto.ErrorResponse;
+import com.gov.app.dto.OpenApiValidationErrorResponse;
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
 
@@ -11,8 +12,11 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.bind.support.WebExchangeBindException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.server.ServerWebInputException;
 import reactor.core.publisher.Mono;
+
+import java.time.Instant;
 
 @Slf4j
 @RestControllerAdvice
@@ -50,7 +54,25 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(ValidationException.class)
     public Mono<ResponseEntity<ErrorResponse>> handleTriggerValidation(ValidationException ex) {
+        // Check if this is an OpenAPI validation with multiple errors
+        if (ex.getValidationErrors() != null && !ex.getValidationErrors().isEmpty()) {
+            OpenApiValidationErrorResponse response = new OpenApiValidationErrorResponse(
+                    "INVALID_OPENAPI_SPEC",
+                    ex.getMessage(),
+                    ex.getValidationErrors(),
+                    Instant.now(),
+                    null // RequestId would come from context in a real implementation
+            );
+            return Mono.just(ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response))
+                    .map(r -> (ResponseEntity<ErrorResponse>) (ResponseEntity<?>) r);
+        }
         return build(HttpStatus.BAD_REQUEST, VALIDATION_ERROR, ex.getMessage());
+    }
+
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public Mono<ResponseEntity<ErrorResponse>> handleFileSizeException(MaxUploadSizeExceededException ex) {
+        return build(HttpStatus.PAYLOAD_TOO_LARGE, "PAYLOAD_TOO_LARGE",
+                "OpenAPI specification exceeds maximum size of 5MB");
     }
 
     @ExceptionHandler(ConflictException.class)

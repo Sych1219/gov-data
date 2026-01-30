@@ -26,41 +26,37 @@ public class OpenApiRegistrationServiceImpl implements OpenApiRegistrationServic
 
     private final GovOpenApiRegistrationRepository registrationRepository;
     private final GovOpenApiEndpointRepository endpointRepository;
-    private final OpenApiValidationService validationService;
 
     @Override
     @Transactional
-    public Mono<OpenApiRegistrationResponse> register(String openApiJson) {
+    public Mono<OpenApiRegistrationResponse> register(ParsedOpenApiSpec parsedSpec, String openApiJson) {
         String requestId = UUID.randomUUID().toString();
         log.info("Starting OpenAPI registration. RequestId: {}", requestId);
 
-        return Mono.fromCallable(() -> validationService.parse(openApiJson))
-                .flatMap(parsedSpec -> {
-                    String title = parsedSpec.getTitle();
-                    String baseUrl = parsedSpec.getBaseUrl();
+        String title = parsedSpec.getTitle();
+        String baseUrl = parsedSpec.getBaseUrl();
 
-                    log.debug("Parsed OpenAPI spec: {} ({}). RequestId: {}", title, baseUrl, requestId);
+        log.debug("Registering OpenAPI spec: {} ({}). RequestId: {}", title, baseUrl, requestId);
 
-                    // Check for duplicates
-                    return isAlreadyRegistered(title, baseUrl)
-                            .flatMap(exists -> {
-                                if (exists) {
-                                    return Mono.error(new ConflictException(
-                                            String.format("API with title '%s' and base URL '%s' already exists",
-                                                    title, baseUrl)));
-                                }
+        // Check for duplicates
+        return isAlreadyRegistered(title, baseUrl)
+                .flatMap(exists -> {
+                    if (exists) {
+                        return Mono.error(new ConflictException(
+                                String.format("API with title '%s' and base URL '%s' already exists",
+                                        title, baseUrl)));
+                    }
 
-                                // Save registration
-                                return saveRegistration(parsedSpec, openApiJson)
-                                        .flatMap(registration -> {
-                                            log.info("Successfully registered API: {}. ID: {}. RequestId: {}",
-                                                    title, registration.getId(), requestId);
+                    // Save registration
+                    return saveRegistration(parsedSpec, openApiJson)
+                            .flatMap(registration -> {
+                                log.info("Successfully registered API: {}. ID: {}. RequestId: {}",
+                                        title, registration.getId(), requestId);
 
-                                            // Save endpoints
-                                            return saveEndpoints(registration.getId(), parsedSpec)
-                                                    .collectList()
-                                                    .map(endpoints -> buildResponse(registration, parsedSpec, endpoints));
-                                        });
+                                // Save endpoints
+                                return saveEndpoints(registration.getId(), parsedSpec)
+                                        .collectList()
+                                        .map(endpoints -> buildResponse(registration, parsedSpec, endpoints));
                             });
                 })
                 .onErrorResume(e -> {

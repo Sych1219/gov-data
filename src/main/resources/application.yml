@@ -6,6 +6,30 @@ spring:
     url: r2dbc:postgresql://172.17.0.6:5432/mydb
     username: myuser
     password: mypass
+  
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema.sql
+
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 5MB
+
+  codec:
+    max-in-memory-size: 5MB
 
 server:
   port: 8080
+
+# OpenAPI Registration Configuration
+gov-api:
+  openapi:
+    max-endpoints: 50
+    supported-versions:
+      - "3.0"
+      - "3.1"
+    validation:
+      strict-mode: true
+      allow-warnings: false

@@ -9,10 +9,11 @@ public interface OpenApiRegistrationService {
 
     /**
      * Registers a new OpenAPI specification
-     * @param openApiJson Raw OpenAPI JSON string (already validated)
+     * @param parsedSpec Already validated and parsed OpenAPI specification
+     * @param openApiJson Raw OpenAPI JSON string for storage
      * @return Registration response with ID and summary
      */
-    Mono<OpenApiRegistrationResponse> register(String openApiJson);
+    Mono<OpenApiRegistrationResponse> register(ParsedOpenApiSpec parsedSpec, String openApiJson);
 
     /**
      * Checks if API is already registered

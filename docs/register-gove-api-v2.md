@@ -144,36 +144,37 @@ CREATE INDEX idx_endpoint_method ON gov_openapi_endpoint (http_method);
 ### 7. Request Processing Flow
 
 ```
-1. Receive POST request with OpenAPI JSON
+1. Receive POST request with OpenAPI JSON (Controller)
    ↓
 2. Validate JSON format (is it valid JSON?)
    ↓
-3. Validate OpenAPI specification structure
+3. Validate OpenAPI specification structure (Controller)
    - Check required fields (openapi, info, paths)
    - Validate OpenAPI version (3.0.x or 3.1.x)
    - Validate servers array (at least one HTTP/HTTPS URL)
    ↓
-4. Parse OpenAPI spec using Swagger Parser
+4. Parse OpenAPI spec using Swagger Parser (Controller)
    - Resolve $ref references
    - Validate schemas
    - Check for circular references
+   - Extract metadata (title, version, base URL, endpoints)
    ↓
-5. Business validation
+5. Pass parsed data to Service layer
+   - Service receives ParsedOpenApiSpec + raw JSON
+   - No re-validation or re-parsing needed
+   ↓
+6. Business validation (Service)
    - Check for duplicate registration (title + base_url)
    - Validate endpoint count (max 50)
-   - Check file size (max 5MB)
    ↓
-6. Extract metadata
-   - API title, version, description
-   - Base URL from servers[0]
-   - All endpoints (path + method)
-   - Parameters, request bodies, responses
-   ↓
-7. Store in database (transactional)
+7. Store in database (transactional - Service)
    - Insert into gov_openapi_registration
    - Insert all endpoints into gov_openapi_endpoint
    ↓
 8. Return success response with ID and summary
+
+Note: Fail-fast approach - validation/parsing failures at controller level 
+return HTTP 400 immediately without entering business logic.
 ```
 
 ### 8. Response Contracts
@@ -317,12 +318,12 @@ public interface OpenApiRegistrationService {
     
     /**
      * Registers a new OpenAPI specification
-     * @param openApiJson Raw OpenAPI JSON string (already validated)
+     * @param parsedSpec Already validated and parsed OpenAPI specification
+     * @param openApiJson Raw OpenAPI JSON string for storage
      * @return Registration response with ID and summary
-     * @throws ValidationException if spec is invalid
      * @throws ConflictException if API already registered
      */
-    OpenApiRegistrationResponse register(String openApiJson);
+    OpenApiRegistrationResponse register(ParsedOpenApiSpec parsedSpec, String openApiJson);
     
     /**
      * Checks if API is already registered
@@ -447,7 +448,7 @@ public class OpenApiRegistrationController {
             @RequestBody @NotNull JsonNode openApiSpec,
             @RequestHeader(value = "X-Request-Id", required = false) String requestId) {
         
-        // Validate specification
+        // Validate and parse specification (fail-fast at API boundary)
         String openApiJson = openApiSpec.toString();
         OpenApiValidationResult validationResult = validationService.validate(openApiJson);
         
@@ -456,8 +457,11 @@ public class OpenApiRegistrationController {
                 validationResult.getErrors());
         }
         
-        // Register the API (service extracts metadata from spec)
-        OpenApiRegistrationResponse response = registrationService.register(openApiJson);
+        // Parse the validated specification to extract metadata
+        ParsedOpenApiSpec parsedSpec = validationService.parse(openApiJson);
+        
+        // Register the API with pre-parsed data
+        OpenApiRegistrationResponse response = registrationService.register(parsedSpec, openApiJson);
         
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
@@ -627,18 +631,17 @@ paths:
 @Slf4j
 public class OpenApiRegistrationServiceImpl implements OpenApiRegistrationService {
     
-    public OpenApiRegistrationResponse register(String openApiJson) {
+    public OpenApiRegistrationResponse register(ParsedOpenApiSpec parsedSpec, String openApiJson) {
         String requestId = UUID.randomUUID().toString();
         
         log.info("Starting OpenAPI registration. RequestId: {}", requestId);
         
         try {
-            // Parse and extract metadata
-            ParsedOpenApiSpec parsedSpec = validationService.parse(openApiJson);
+            // Extract metadata (already validated and parsed in controller)
             String title = parsedSpec.getTitle();
             String baseUrl = parsedSpec.getBaseUrl();
             
-            log.debug("Parsed OpenAPI spec: {} ({}). RequestId: {}", title, baseUrl, requestId);
+            log.debug("Registering OpenAPI spec: {} ({}). RequestId: {}", title, baseUrl, requestId);
             
             // Check for duplicates
             if (isAlreadyRegistered(title, baseUrl)) {
@@ -646,7 +649,7 @@ public class OpenApiRegistrationServiceImpl implements OpenApiRegistrationServic
             }
             
             // Store in database
-            log.info("Registering API: {}. RequestId: {}", title, requestId);
+            log.info("Saving API to database: {}. RequestId: {}", title, requestId);
             UUID apiId = saveToDatabase(parsedSpec, openApiJson);
             
             // Success
