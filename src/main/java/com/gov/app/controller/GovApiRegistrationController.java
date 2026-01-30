@@ -88,7 +88,7 @@ public class GovApiRegistrationController {
             if (key.startsWith("filters[") && key.endsWith("]") && values != null && !values.isEmpty()) {
                 String normalizedKey = key.substring(8, key.length() - 1);
                 if (!normalizedKey.isBlank()) {
-                    filters.put(normalizedKey, values.get(0));
+                    filters.put(normalizedKey, values.getFirst());
                 }
             }
         });
