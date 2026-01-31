@@ -12,7 +12,10 @@ import java.util.UUID;
 @Builder
 public class GovApiTriggerResponse {
     private final String status;
-    private final UUID apiId;
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private final UUID apiId;  // For V1 compatibility
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private final UUID endpointId;  // For V2 OpenAPI endpoints
     private final int externalStatus;
     private final OffsetDateTime invokedAt;
     private final String requestId;
