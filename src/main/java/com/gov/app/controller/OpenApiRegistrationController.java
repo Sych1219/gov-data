@@ -5,8 +5,10 @@ import com.gov.app.config.CorrelationIdFilter;
 import com.gov.app.dto.GovApiTriggerRequestV2;
 import com.gov.app.dto.GovApiTriggerResponse;
 import com.gov.app.dto.OpenApiRegistrationResponse;
+import com.gov.app.dto.OpenApiSchemasResponse;
 import com.gov.app.exception.ValidationException;
 import com.gov.app.service.OpenApiRegistrationService;
+import com.gov.app.service.OpenApiSchemaService;
 import com.gov.app.service.OpenApiTriggerService;
 import com.gov.app.service.OpenApiValidationService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -34,6 +36,7 @@ public class OpenApiRegistrationController {
     private final OpenApiRegistrationService registrationService;
     private final OpenApiValidationService validationService;
     private final OpenApiTriggerService triggerService;
+    private final OpenApiSchemaService schemaService;
 
     @PostMapping(value = "/openapi", consumes = MediaType.APPLICATION_JSON_VALUE)
     @ResponseStatus(HttpStatus.CREATED)
@@ -67,6 +70,23 @@ public class OpenApiRegistrationController {
     public Mono<OpenApiRegistrationResponse> getOpenApi(@PathVariable UUID id) {
         log.info("Retrieving OpenAPI registration with id: {}", id);
         return registrationService.getById(id);
+    }
+
+    /**
+     * Get all endpoint schemas for LLM consumption
+     * GET /api/v2/gov/apis/schemas
+     */
+    @GetMapping("/schemas")
+    @Operation(
+        summary = "Get all endpoint schemas for LLM",
+        description = "Returns all endpoint descriptions and parameters in LLM-friendly format for discovery and request construction"
+    )
+    public Mono<ResponseEntity<OpenApiSchemasResponse>> getAllEndpointSchemas() {
+        
+        log.info("Retrieving all endpoint schemas for LLM");
+        
+        return schemaService.getAllEndpointSchemas()
+                .map(ResponseEntity::ok);
     }
 
     /**

@@ -134,6 +134,8 @@ public class OpenApiSchemaServiceImpl implements OpenApiSchemaService {
 
     /**
      * Extract query parameters from parameters_json
+     * Only includes parameters where "in" = "query"
+     * Excludes header, path, and cookie parameters (handled by backend)
      */
     private List<OpenApiEndpointSchema.Parameter> extractQueryParameters(String parametersJson) {
         List<OpenApiEndpointSchema.Parameter> parameters = new ArrayList<>();
@@ -145,21 +147,26 @@ public class OpenApiSchemaServiceImpl implements OpenApiSchemaService {
                 for (JsonNode param : paramArray) {
                     String in = param.path("in").asText();
                     
-                    // Only process query and header parameters
-                    if ("query".equals(in) || "header".equals(in)) {
-                        String name = param.path("name").asText();
-                        boolean required = param.path("required").asBoolean(false);
-                        String type = extractType(param.path("schema"));
-                        String description = param.path("description").asText(name + " (" + type + ")");
-                        
-                        parameters.add(OpenApiEndpointSchema.Parameter.builder()
-                                .name(name)
-                                .location("query")
-                                .required(required)
-                                .type(type)
-                                .description(description)
-                                .build());
+                    // Only include query parameters
+                    // Exclude: header (auth/security), path (routing), cookie (session)
+                    if (!"query".equals(in)) {
+                        log.debug("Excluding non-query parameter from LLM schema: {} (in: {})", 
+                                param.path("name").asText(), in);
+                        continue;
                     }
+                    
+                    String name = param.path("name").asText();
+                    boolean required = param.path("required").asBoolean(false);
+                    String type = extractType(param.path("schema"));
+                    String description = param.path("description").asText(name + " (" + type + ")");
+                    
+                    parameters.add(OpenApiEndpointSchema.Parameter.builder()
+                            .name(name)
+                            .location("query")
+                            .required(required)
+                            .type(type)
+                            .description(description)
+                            .build());
                 }
             }
         } catch (JsonProcessingException e) {

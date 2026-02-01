@@ -69,6 +69,8 @@ This API provides simplified endpoint metadata designed specifically for LLM con
 | `type` | String | Yes | Data type: `string`, `integer`, `boolean`, `number`, `array`, `object` |
 | `description` | String | Yes | LLM-friendly description including format requirements, examples, and extraction hints |
 
+**Note:** Only `query` and `body` parameters are included. Header, path, and cookie parameters are excluded as they are handled by the backend (authentication, routing, etc.) and should not be exposed to the LLM.
+
 ## 5. Example Responses
 
 ### 5.1 Complete Response Example
@@ -426,11 +428,20 @@ WHERE id = (SELECT openapi_id FROM gov_openapi_endpoint WHERE id = ?)
       "type": "string"
     },
     "description": "Pagination token for retrieving subsequent data pages (only exists when there is a next page available for requests with date filters)"
+  },
+  {
+    "name": "x-api-key",
+    "in": "header",
+    "required": false,
+    "schema": {
+      "type": "string"
+    },
+    "description": "API key for authentication (excluded from LLM schema)"
   }
 ]
 ```
 
-**Maps to parameters:**
+**Maps to parameters (excluding headers):**
 ```json
 [
   {
@@ -447,6 +458,7 @@ WHERE id = (SELECT openapi_id FROM gov_openapi_endpoint WHERE id = ?)
     "type": "string",
     "description": "Pagination token for retrieving subsequent data pages (only exists when there is a next page available for requests with date filters)"
   }
+  // Note: x-api-key (header parameter) is excluded from LLM schema
 ]
 ```
 
@@ -528,7 +540,9 @@ public interface OpenApiSchemaService {
    ↓
 3. Parse query parameters
    - Extract from parameters_json
-   - For each parameter:
+   - Filter: only include parameters where "in" = "query"
+   - Exclude: header, path, cookie parameters (security/routing)
+   - For each query parameter:
      * Set location = "query"
      * Set name, type, required from OpenAPI
      * Build LLM-friendly description with format hints
@@ -590,14 +604,29 @@ String buildLlmFriendlyDescription(String title, String summary, String descript
 
 **Pseudocode:**
 ```java
-String extractParameterDescription(OpenApiParameter param) {
-    // Use OpenAPI description as-is
-    if (param.getDescription() != null && !param.getDescription().isEmpty()) {
-        return param.getDescription();
+List<Parameter> extractQueryParameters(String parametersJson) {
+    List<Parameter> result = new ArrayList<>();
+    
+    for (OpenApiParameter param : parseJson(parametersJson)) {
+        // Only include query parameters
+        if (!"query".equals(param.getIn())) {
+            continue; // Skip header, path, cookie parameters
+        }
+        
+        String description = param.getDescription() != null && !param.getDescription().isEmpty()
+            ? param.getDescription()
+            : param.getName() + " (" + param.getSchema().getType() + ")";
+        
+        result.add(Parameter.builder()
+            .name(param.getName())
+            .location("query")
+            .required(param.isRequired())
+            .type(param.getSchema().getType())
+            .description(description)
+            .build());
     }
     
-    // Fallback: use parameter name with type
-    return param.getName() + " (" + param.getSchema().getType() + ")";
+    return result;
 }
 
 String extractBodyPropertyDescription(String name, Schema schema) {
@@ -791,13 +820,20 @@ public class OpenApiRegistrationController {
 
 ### 13.4 Omit Internal Details
 
-**Decision:** Don't expose `httpMethod`, `path`, `baseUrl`, `headers`
+**Decision:** Don't expose `httpMethod`, `path`, `baseUrl`, `headers`, and header/path/cookie parameters
 
 **Rationale:**
 - LLM doesn't need internal routing details
 - Trigger API handles HTTP mechanics automatically
+- Security parameters (API keys, auth tokens) handled by backend
 - Reduces response size
 - Focuses LLM on parameter construction only
+- Prevents LLM from attempting to extract or expose security credentials
+
+**Implementation:**
+- Only include parameters where `"in": "query"` or from request body
+- Silently exclude parameters where `"in": "header"`, `"path"`, or `"cookie"`
+- Backend transparently injects authentication headers when triggering upstream APIs
 
 ### 13.5 No Response Schema
 
@@ -980,9 +1016,14 @@ Useful when:
 ## 17. Security Considerations
 
 1. **No Authentication Details**: Don't expose API keys or credentials
-2. **Rate Limiting**: Protect against schema scraping
-3. **Access Control**: Optionally restrict schema access to authenticated users
-4. **Audit Logging**: Log schema retrievals for monitoring
+   - Header parameters (x-api-key, authorization, etc.) are automatically excluded
+   - Backend handles authentication transparently when triggering upstream APIs
+2. **Parameter Filtering**: Only expose query and body parameters to LLM
+   - Prevents LLM from seeing or attempting to use security credentials
+   - Reduces risk of credential exposure in LLM responses or logs
+3. **Rate Limiting**: Protect against schema scraping
+4. **Access Control**: Optionally restrict schema access to authenticated users
+5. **Audit Logging**: Log schema retrievals for monitoring
 
 ## 18. Monitoring
 
