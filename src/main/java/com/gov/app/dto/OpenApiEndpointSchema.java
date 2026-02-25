@@ -36,7 +36,7 @@ public class OpenApiEndpointSchema {
     private List<Parameter> parameters;
 
 
-    private String responseFormat;
+    private JsonNode responseFormat;
     
     /**
      * Individual parameter definition for LLM consumption
