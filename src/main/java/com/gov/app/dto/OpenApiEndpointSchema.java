@@ -1,5 +1,6 @@
 package com.gov.app.dto;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -33,6 +34,9 @@ public class OpenApiEndpointSchema {
      * Flat array with location field differentiating query vs body
      */
     private List<Parameter> parameters;
+
+
+    private String responseFormat;
     
     /**
      * Individual parameter definition for LLM consumption

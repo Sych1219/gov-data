@@ -37,7 +37,7 @@ import java.util.stream.Collectors;
 public class OpenApiTriggerServiceImpl implements OpenApiTriggerService {
 
     private static final Duration DEFAULT_TIMEOUT = Duration.ofSeconds(20);
-    private static final int MAX_RESPONSE_BYTES = 64 * 1024;
+    private static final int MAX_RESPONSE_BYTES = 128 * 1024;
 
     private final GovOpenApiEndpointRepository endpointRepository;
     private final GovOpenApiRegistrationRepository registrationRepository;

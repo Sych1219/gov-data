@@ -60,11 +60,14 @@ public class OpenApiSchemaServiceImpl implements OpenApiSchemaService {
                     );
                     
                     List<OpenApiEndpointSchema.Parameter> parameters = extractAllParameters(endpoint);
+                    String responseFormat = extractResponseFormatFromSpec(
+                            registration.getOpenapiSpecJson(), endpoint.getPath(), endpoint.getHttpMethod());
                     
                     return OpenApiEndpointSchema.builder()
                             .id(endpoint.getId())
                             .description(description)
                             .parameters(parameters)
+                            .responseFormat(responseFormat)
                             .build();
                 })
                 .defaultIfEmpty(OpenApiEndpointSchema.builder()
@@ -229,6 +232,30 @@ public class OpenApiSchemaServiceImpl implements OpenApiSchemaService {
         }
         
         return parameters;
+    }
+
+    /**
+     * Extract the responses object from the full OpenAPI spec JSON for a specific path and method.
+     * Navigates: paths -> {path} -> {method} -> responses
+     */
+    private String extractResponseFormatFromSpec(String openapiSpecJson, String path, String httpMethod) {
+        if (openapiSpecJson == null || openapiSpecJson.trim().isEmpty()) {
+            return null;
+        }
+        try {
+            JsonNode spec = objectMapper.readTree(openapiSpecJson);
+            JsonNode responses = spec.path("paths")
+                    .path(path)
+                    .path(httpMethod.toLowerCase())
+                    .path("responses");
+            if (responses.isMissingNode()) {
+                return null;
+            }
+            return objectMapper.writeValueAsString(responses);
+        } catch (JsonProcessingException e) {
+            log.warn("Failed to extract response format from OpenAPI spec: {}", e.getMessage());
+            return null;
+        }
     }
 
     /**
