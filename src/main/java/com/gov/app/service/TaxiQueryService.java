@@ -45,9 +45,6 @@ public class TaxiQueryService {
     // ── Count taxis within radius ──────────────────────────────────────────────
 
     public Mono<TaxiNearbyCountResponse> countNearby(double lat, double lon, int radiusM, String datetime) {
-        if (radiusM <= 0) {
-            return Mono.error(new ValidationException("radius must be greater than 0"));
-        }
         return resolveSnapshot(datetime)
                 .flatMap(snapshot -> positionRepository.countNearby(snapshot.getId(), lat, lon, radiusM)
                         .map(count -> TaxiNearbyCountResponse.builder()
@@ -61,9 +58,6 @@ public class TaxiQueryService {
     // ── List taxis within radius ───────────────────────────────────────────────
 
     public Mono<TaxiNearbyListResponse> listNearby(double lat, double lon, int radiusM, int limit, String datetime) {
-        if (radiusM <= 0) {
-            return Mono.error(new ValidationException("radius must be greater than 0"));
-        }
         return resolveSnapshot(datetime)
                 .flatMap(snapshot -> positionRepository
                         .listNearby(snapshot.getId(), lat, lon, radiusM, limit)
@@ -82,9 +76,6 @@ public class TaxiQueryService {
     // ── Nearest N taxis ────────────────────────────────────────────────────────
 
     public Mono<TaxiNearestResponse> findNearest(double lat, double lon, int limit, String datetime) {
-        if (limit <= 0) {
-            return Mono.error(new ValidationException("limit must be greater than 0"));
-        }
         return resolveSnapshot(datetime)
                 .flatMap(snapshot -> positionRepository
                         .findNearest(snapshot.getId(), lat, lon, limit)
@@ -122,9 +113,6 @@ public class TaxiQueryService {
     // ── Road count ─────────────────────────────────────────────────────────────
 
     public Mono<Long> countNearRoad(String roadName, int bufferM, String datetime) {
-        if (bufferM <= 0) {
-            return Mono.error(new ValidationException("buffer_m must be greater than 0"));
-        }
         return resolveSnapshot(datetime)
                 .flatMap(snapshot -> positionRepository.countNearRoad(snapshot.getId(), roadName, bufferM));
     }
@@ -132,9 +120,6 @@ public class TaxiQueryService {
     // ── Route count ────────────────────────────────────────────────────────────
 
     public Mono<Long> countAlongRoute(String routeGeoJson, int bufferM, String datetime) {
-        if (bufferM <= 0) {
-            return Mono.error(new ValidationException("buffer_m must be greater than 0"));
-        }
         return resolveSnapshot(datetime)
                 .flatMap(snapshot -> positionRepository.countAlongRoute(snapshot.getId(), routeGeoJson, bufferM));
     }

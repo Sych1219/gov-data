@@ -3,7 +3,12 @@ package com.gov.app.controller;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.gov.app.dto.*;
 import com.gov.app.service.TaxiQueryService;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Positive;
 import lombok.RequiredArgsConstructor;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Mono;
 
@@ -12,6 +17,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/v1/taxis")
 @RequiredArgsConstructor
+@Validated
 public class TaxiController {
 
     private final TaxiQueryService queryService;
@@ -20,9 +26,9 @@ public class TaxiController {
     /** 4.1 Count taxis within radius */
     @GetMapping("/nearby/count")
     public Mono<TaxiNearbyCountResponse> nearbyCount(
-            @RequestParam double lat,
-            @RequestParam double lon,
-            @RequestParam int radius,
+            @RequestParam @DecimalMin("-90.0") @DecimalMax("90.0") double lat,
+            @RequestParam @DecimalMin("-180.0") @DecimalMax("180.0") double lon,
+            @RequestParam @Positive int radius,
             @RequestParam(required = false) String datetime) {
         return queryService.countNearby(lat, lon, radius, datetime);
     }
@@ -30,10 +36,10 @@ public class TaxiController {
     /** 4.2 List taxis within radius (GeoJSON FeatureCollection) */
     @GetMapping("/nearby")
     public Mono<TaxiNearbyListResponse> nearbyList(
-            @RequestParam double lat,
-            @RequestParam double lon,
-            @RequestParam int radius,
-            @RequestParam(defaultValue = "100") int limit,
+            @RequestParam @DecimalMin("-90.0") @DecimalMax("90.0") double lat,
+            @RequestParam @DecimalMin("-180.0") @DecimalMax("180.0") double lon,
+            @RequestParam @Positive int radius,
+            @RequestParam(defaultValue = "100") @Positive int limit,
             @RequestParam(required = false) String datetime) {
         return queryService.listNearby(lat, lon, radius, limit, datetime);
     }
@@ -41,9 +47,9 @@ public class TaxiController {
     /** 4.3 Nearest N taxis with distances */
     @GetMapping("/nearest")
     public Mono<TaxiNearestResponse> nearest(
-            @RequestParam double lat,
-            @RequestParam double lon,
-            @RequestParam(defaultValue = "5") int limit,
+            @RequestParam @DecimalMin("-90.0") @DecimalMax("90.0") double lat,
+            @RequestParam @DecimalMin("-180.0") @DecimalMax("180.0") double lon,
+            @RequestParam(defaultValue = "5") @Positive int limit,
             @RequestParam(required = false) String datetime) {
         return queryService.findNearest(lat, lon, limit, datetime);
     }
@@ -58,7 +64,7 @@ public class TaxiController {
 
     /** 4.5 Count taxis in a custom GeoJSON polygon */
     @PostMapping("/polygon/count")
-    public Mono<Map<String, Object>> polygonCount(@RequestBody TaxiPolygonRequest request) {
+    public Mono<Map<String, Object>> polygonCount(@Valid @RequestBody TaxiPolygonRequest request) {
         String polygonJson;
         try {
             polygonJson = objectMapper.writeValueAsString(request.getPolygon());
@@ -73,7 +79,7 @@ public class TaxiController {
     @GetMapping("/road/{roadName}/count")
     public Mono<Map<String, Object>> roadCount(
             @PathVariable String roadName,
-            @RequestParam(defaultValue = "100") int buffer_m,
+            @RequestParam(defaultValue = "100") @Positive int buffer_m,
             @RequestParam(required = false) String datetime) {
         return queryService.countNearRoad(roadName, buffer_m, datetime)
                 .map(count -> Map.of("road", roadName, "taxi_count", count));
@@ -81,7 +87,7 @@ public class TaxiController {
 
     /** 4.7 Count taxis along a custom route buffer */
     @PostMapping("/route/count")
-    public Mono<Map<String, Object>> routeCount(@RequestBody TaxiRouteRequest request) {
+    public Mono<Map<String, Object>> routeCount(@Valid @RequestBody TaxiRouteRequest request) {
         String routeJson;
         try {
             routeJson = objectMapper.writeValueAsString(request.getRoute());

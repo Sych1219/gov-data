@@ -33,3 +33,8 @@ gov-api:
     validation:
       strict-mode: true
       allow-warnings: false
+
+  taxi:
+    base-url: https://api.data.gov.sg
+    api-key: ""
+    fetch-interval-ms: 60000
