@@ -56,12 +56,13 @@ boundaries via the OneMap API (Singapore Government's official geospatial platfo
 
 | Resource | URL |
 |----------|-----|
-| OneMap Planning Areas | `https://www.onemap.gov.sg/api/public/geodata/PlanningAreasGeo` |
+| OneMap Planning Areas | `https://www.onemap.gov.sg/api/public/popapi/getAllPlanningarea` |
 | OneMap Subzones | `https://www.onemap.gov.sg/api/public/geodata/SubzonesGeo` |
 | URA GeoJSON (static) | `https://data.gov.sg/datasets?query=planning+area` |
 
-Response is GeoJSON `FeatureCollection` where each feature's `properties.pln_area_n`
-(or `subzone_n`) is the zone name and `geometry` is the polygon.
+Response is a JSON object `{"SearchResults": [...]}` where each element has
+`pln_area_n` (planning area name, uppercase) and `geojson` (a geometry string,
+e.g. `MultiPolygon`). Requires a Bearer token in the `Authorization` header.
 
 ### 3.2 Road/Highway LineStrings — OpenStreetMap (Overpass API)
 
@@ -87,28 +88,72 @@ external APIs are unavailable at startup.
 
 ---
 
-## 4. Canonical Zone Catalog
+## 4. Zone Catalog
 
-Minimum viable zone set, ordered by expected query frequency:
+All 55 URA planning area names are used directly as returned by the OneMap API (uppercase).
+No canonical remapping is applied.
 
 ### 4.1 Districts (`category = 'district'`)
 
-| `name` | Description |
-|--------|-------------|
-| `CBD` | Central Business District (Raffles Place, Tanjong Pagar, Marina Bay) |
-| `Orchard` | Orchard Road shopping belt |
-| `Marina Bay` | Marina Bay Sands, Gardens by the Bay area |
-| `Changi` | Changi Airport and surroundings |
-| `Tampines` | Tampines planning area (east) |
-| `Jurong East` | Jurong East commercial hub |
-| `Woodlands` | Woodlands (north, Causeway area) |
-| `Bishan` | Bishan–Ang Mo Kio central area |
-| `Punggol` | Punggol new town (northeast) |
-| `Sentosa` | Sentosa Island resort area |
-| `Harbourfront` | VivoCity, HarbourFront terminal |
-| `Novena` | Novena medical / commercial district |
-| `Toa Payoh` | Toa Payoh HDB estate |
-| `Buona Vista` | One-North / Buona Vista research hub |
+All planning areas sourced from `getAllPlanningarea` (55 total):
+
+| `name` |
+|--------|
+| `ANG MO KIO` |
+| `BEDOK` |
+| `BISHAN` |
+| `BOON LAY` |
+| `BUKIT BATOK` |
+| `BUKIT MERAH` |
+| `BUKIT PANJANG` |
+| `BUKIT TIMAH` |
+| `CENTRAL WATER CATCHMENT` |
+| `CHANGI` |
+| `CHANGI BAY` |
+| `CHOA CHU KANG` |
+| `CLEMENTI` |
+| `DOWNTOWN CORE` |
+| `GEYLANG` |
+| `HOUGANG` |
+| `JURONG EAST` |
+| `JURONG WEST` |
+| `KALLANG` |
+| `LIM CHU KANG` |
+| `MANDAI` |
+| `MARINA EAST` |
+| `MARINA SOUTH` |
+| `MARINE PARADE` |
+| `MUSEUM` |
+| `NEWTON` |
+| `NORTH-EASTERN ISLANDS` |
+| `NOVENA` |
+| `ORCHARD` |
+| `OUTRAM` |
+| `PASIR RIS` |
+| `PAYA LEBAR` |
+| `PIONEER` |
+| `PUNGGOL` |
+| `QUEENSTOWN` |
+| `RIVER VALLEY` |
+| `ROCHOR` |
+| `SELETAR` |
+| `SEMBAWANG` |
+| `SENGKANG` |
+| `SERANGOON` |
+| `SIMPANG` |
+| `SINGAPORE RIVER` |
+| `SOUTHERN ISLANDS` |
+| `STRAITS VIEW` |
+| `SUNGEI KADUT` |
+| `TAMPINES` |
+| `TANGLIN` |
+| `TENGAH` |
+| `TOA PAYOH` |
+| `TUAS` |
+| `WESTERN ISLANDS` |
+| `WESTERN WATER CATCHMENT` |
+| `WOODLANDS` |
+| `YISHUN` |
 
 ### 4.2 Roads (`category = 'road'`)
 
@@ -428,7 +473,7 @@ zone:
   seed:
     onemap:
       enabled: true
-      planning-areas-url: https://www.onemap.gov.sg/api/public/geodata/PlanningAreasGeo
+      planning-areas-url: https://www.onemap.gov.sg/api/public/popapi/getAllPlanningarea
     fallback-file: classpath:zones-seed.json
 ```
 

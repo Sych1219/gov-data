@@ -51,3 +51,11 @@ gov-api:
     base-url: https://api.data.gov.sg
     api-key: ""
     fetch-interval-ms: 60000
+
+zone:
+  seed:
+    onemap:
+      enabled: true
+      planning-areas-url: https://www.onemap.gov.sg/api/public/popapi/getAllPlanningarea
+      token: eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoxMTY3NCwiZm9yZXZlciI6ZmFsc2UsImlzcyI6Ik9uZU1hcCIsImlhdCI6MTc3MjQzODM3NCwibmJmIjoxNzcyNDM4Mzc0LCJleHAiOjE3NzI2OTc1NzQsImp0aSI6IjhjNGY5MzkwLTQ0ZjMtNGE5OS1iNTdiLTgyYTcyYTU4ODdjYiJ9.ir8CRNw6m_2jsnHOLkTpDXt-DE8lnnze4qVneo0TNWdPVmrwhswRUepC-WhGlrARtSYlWYOf9lD7UWX0CaYN8O-DTJ6GXC-IrSfHLIsbKoy25pweCV652X_C0b98aFngPc3iIyMpbD_A94z903vozjzeeLJMbmZtul2op4NTZdSZJuNQ1O9MloLFvINReMOy6rxYFVbCqdrAVtZHXYMb2hOkT3FRUyIvCFopc3_WyTlqHh3jHuMMwpR086CVyjJ7u8XxcTsAL7ZDXmXBUQF5TjmUl2e5eRY77uJzVp357eMlUH77iXtxme4AHLlub4RAV3Y5yQ7RrsucG8ZznfTJZg
+    fallback-file: classpath:zones-seed.json
