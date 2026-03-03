@@ -96,21 +96,22 @@ public class TaxiQueryService {
     // ── Zone count ─────────────────────────────────────────────────────────────
 
     public Mono<TaxiZoneCountResponse> countInZone(String zoneName, String datetime) {
-        return zoneRepository.existsByName(zoneName)
-                .flatMap(exists -> {
-                    if (!exists) {
-                        return Mono.error(new NotFoundException(
-                                "Zone not found: '" + zoneName + "'. " +
-                                "Check GET /api/v1/zones for available zone names."));
-                    }
-                    return resolveSnapshot(datetime)
-                            .flatMap(snapshot -> positionRepository.countInZone(snapshot.getId(), zoneName)
-                                    .map(count -> TaxiZoneCountResponse.builder()
-                                            .zone(zoneName)
-                                            .taxiCount(count)
-                                            .snapshotTime(snapshot.getApiTimestamp())
-                                            .build()));
-                });
+        return zoneRepository.findBestMatch(zoneName, 0.3)
+                .switchIfEmpty(
+                        zoneRepository.findSuggestions(zoneName, 3)
+                                .collectList()
+                                .flatMap(suggestions -> Mono.error(new NotFoundException(
+                                        "Zone not found: '" + zoneName + "'. " +
+                                        "Did you mean: " + suggestions + "? " +
+                                        "Check GET /api/v1/zones for all available zone names.")))
+                )
+                .flatMap(resolvedName -> resolveSnapshot(datetime)
+                        .flatMap(snapshot -> positionRepository.countInZone(snapshot.getId(), resolvedName)
+                                .map(count -> TaxiZoneCountResponse.builder()
+                                        .zone(resolvedName)
+                                        .taxiCount(count)
+                                        .snapshotTime(snapshot.getApiTimestamp())
+                                        .build())));
     }
 
     // ── Custom polygon count ───────────────────────────────────────────────────

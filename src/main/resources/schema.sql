@@ -1,6 +1,9 @@
 -- Enable PostGIS extension (idempotent)
 CREATE EXTENSION IF NOT EXISTS postgis;
 
+-- Enable pg_trgm for fuzzy zone name search
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+
 -- ── Snapshot metadata (one row per API poll) ─────────────────────────────────
 CREATE TABLE IF NOT EXISTS taxi_snapshots (
     id            BIGSERIAL    PRIMARY KEY,
@@ -42,6 +45,9 @@ CREATE TABLE IF NOT EXISTS zones (
 
 CREATE INDEX IF NOT EXISTS idx_zones_name
     ON zones (name);
+
+CREATE INDEX IF NOT EXISTS idx_zones_name_trgm
+    ON zones USING GIN (name gin_trgm_ops);
 
 CREATE INDEX IF NOT EXISTS idx_zones_geog
     ON zones USING GIST (geog);
