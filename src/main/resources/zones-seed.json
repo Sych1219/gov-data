@@ -1,0 +1,374 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": { "name": "CBD", "category": "district" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [103.8198, 1.2789],
+          [103.8547, 1.2789],
+          [103.8547, 1.2966],
+          [103.8198, 1.2966],
+          [103.8198, 1.2789]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "Orchard", "category": "district" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [103.8130, 1.2960],
+          [103.8440, 1.2960],
+          [103.8440, 1.3140],
+          [103.8130, 1.3140],
+          [103.8130, 1.2960]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "Marina Bay", "category": "district" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [103.8548, 1.2730],
+          [103.8720, 1.2730],
+          [103.8720, 1.2900],
+          [103.8548, 1.2900],
+          [103.8548, 1.2730]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "Changi", "category": "district" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [103.9730, 1.3440],
+          [104.0080, 1.3440],
+          [104.0080, 1.3780],
+          [103.9730, 1.3780],
+          [103.9730, 1.3440]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "Tampines", "category": "district" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [103.9230, 1.3420],
+          [103.9650, 1.3420],
+          [103.9650, 1.3720],
+          [103.9230, 1.3720],
+          [103.9230, 1.3420]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "Jurong East", "category": "district" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [103.7260, 1.3200],
+          [103.7590, 1.3200],
+          [103.7590, 1.3500],
+          [103.7260, 1.3500],
+          [103.7260, 1.3200]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "Woodlands", "category": "district" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [103.7700, 1.4220],
+          [103.8120, 1.4220],
+          [103.8120, 1.4520],
+          [103.7700, 1.4520],
+          [103.7700, 1.4220]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "Bishan", "category": "district" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [103.8350, 1.3490],
+          [103.8590, 1.3490],
+          [103.8590, 1.3700],
+          [103.8350, 1.3700],
+          [103.8350, 1.3490]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "Punggol", "category": "district" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [103.8940, 1.3940],
+          [103.9310, 1.3940],
+          [103.9310, 1.4200],
+          [103.8940, 1.4200],
+          [103.8940, 1.3940]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "Sentosa", "category": "district" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [103.8180, 1.2440],
+          [103.8680, 1.2440],
+          [103.8680, 1.2620],
+          [103.8180, 1.2620],
+          [103.8180, 1.2440]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "Harbourfront", "category": "district" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [103.8140, 1.2600],
+          [103.8330, 1.2600],
+          [103.8330, 1.2790],
+          [103.8140, 1.2790],
+          [103.8140, 1.2600]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "Novena", "category": "district" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [103.8200, 1.3150],
+          [103.8410, 1.3150],
+          [103.8410, 1.3360],
+          [103.8200, 1.3360],
+          [103.8200, 1.3150]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "Toa Payoh", "category": "district" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [103.8440, 1.3280],
+          [103.8640, 1.3280],
+          [103.8640, 1.3480],
+          [103.8440, 1.3480],
+          [103.8440, 1.3280]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "Buona Vista", "category": "district" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [103.7810, 1.3040],
+          [103.8010, 1.3040],
+          [103.8010, 1.3210],
+          [103.7810, 1.3210],
+          [103.7810, 1.3040]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "Orchard Road", "category": "road" },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [103.8130, 1.3020],
+          [103.8220, 1.3015],
+          [103.8310, 1.3010],
+          [103.8430, 1.3005]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "Shenton Way", "category": "road" },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [103.8468, 1.2800],
+          [103.8503, 1.2787],
+          [103.8533, 1.2774]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "Beach Road", "category": "road" },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [103.8520, 1.2994],
+          [103.8560, 1.2990],
+          [103.8600, 1.2986],
+          [103.8634, 1.2982]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "Thomson Road", "category": "road" },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [103.8200, 1.3080],
+          [103.8208, 1.3230],
+          [103.8215, 1.3380],
+          [103.8220, 1.3550],
+          [103.8226, 1.3750]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "PIE", "category": "highway" },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [103.6780, 1.3400],
+          [103.7200, 1.3350],
+          [103.7700, 1.3300],
+          [103.8200, 1.3200],
+          [103.8700, 1.3100],
+          [103.9200, 1.3050]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "CTE", "category": "highway" },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [103.8190, 1.2870],
+          [103.8185, 1.3170],
+          [103.8178, 1.3480],
+          [103.8170, 1.3800],
+          [103.8160, 1.4100]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "ECP", "category": "highway" },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [103.8450, 1.2780],
+          [103.8800, 1.2720],
+          [103.9150, 1.2700],
+          [103.9550, 1.2820],
+          [103.9850, 1.3100]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "SLE", "category": "highway" },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [103.8530, 1.3800],
+          [103.8690, 1.3960],
+          [103.8840, 1.4110],
+          [103.9050, 1.4260]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "BKE", "category": "highway" },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [103.7690, 1.3040],
+          [103.7630, 1.3300],
+          [103.7580, 1.3640],
+          [103.7560, 1.3950]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "KPE", "category": "highway" },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [103.8780, 1.3070],
+          [103.8820, 1.3320],
+          [103.8870, 1.3580],
+          [103.8950, 1.3800]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "MCE", "category": "highway" },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [103.8400, 1.2730],
+          [103.8590, 1.2710],
+          [103.8730, 1.2750],
+          [103.8780, 1.2850]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "TPE", "category": "highway" },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [103.8950, 1.3680],
+          [103.9280, 1.3680],
+          [103.9560, 1.3590],
+          [103.9750, 1.3420]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "AYE", "category": "highway" },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [103.7330, 1.3050],
+          [103.7740, 1.2920],
+          [103.8190, 1.2800],
+          [103.8400, 1.2760]
+        ]
+      }
+    }
+  ]
+}
