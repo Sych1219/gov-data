@@ -66,18 +66,33 @@ e.g. `MultiPolygon`). Requires a Bearer token in the `Authorization` header.
 
 ### 3.2 Road/Highway LineStrings — OpenStreetMap (Overpass API)
 
-Major expressways and arterial roads can be fetched as LineStrings from OSM.
+Expressways and arterial roads are discovered **dynamically** by querying OSM for all
+named ways matching a given `highway` type tag within Singapore's bounding box
+`(1.1,103.5,1.5,104.1)`. No hard-coded name list is used — zone name = `tags.name`
+from OSM directly, covering every named road returned (e.g. "Pan Island Expressway",
+"Upper Serangoon Road", "Punggol Walk").
 
 ```
 Overpass API: https://overpass-api.de/api/interpreter
 ```
 
-Example Overpass QL query to fetch PIE in Singapore:
+Two tag-based queries are executed at startup:
+
 ```
+# All expressways in Singapore → category = 'highway'
 [out:json];
-way["name"="Pan Island Expressway"]["highway"~"motorway"](1.2,103.6,1.5,104.0);
+way["highway"="motorway"]["name"](1.1,103.5,1.5,104.1);
+out geom;
+
+# All major arterial roads in Singapore → category = 'road'
+[out:json];
+way["highway"~"trunk|primary"]["name"](1.1,103.5,1.5,104.1);
 out geom;
 ```
+
+The `["name"]` filter excludes unnamed ramps and slip roads. Each response contains
+multiple `way` elements. Ways sharing the same `tags.name` are grouped and their
+coordinate sequences combined into a single `MULTILINESTRING` WKT per zone entry.
 
 ---
 
@@ -150,26 +165,23 @@ All planning areas sourced from `getAllPlanningarea` (55 total):
 
 ### 4.2 Roads (`category = 'road'`)
 
-| `name` | Description |
-|--------|-------------|
-| `Orchard Road` | Main shopping arterial |
-| `Shenton Way` | CBD financial corridor |
-| `Beach Road` | Beach Road / Bugis |
-| `Thomson Road` | North–south arterial |
+Roads are discovered **dynamically** at startup by querying OSM for all ways tagged
+`highway=trunk` or `highway=primary` within Singapore's bounding box.
+Zone `name` = `tags.name` as returned by OSM. No canonical remapping is applied.
+
+Examples of roads that will be discovered: "Orchard Road", "Thomson Road",
+"Upper Serangoon Road", "Punggol Walk", "Shenton Way", "Beach Road", and all
+other named trunk/primary roads in Singapore.
 
 ### 4.3 Highways (`category = 'highway'`)
 
-| `name` | Description |
-|--------|-------------|
-| `PIE` | Pan Island Expressway |
-| `CTE` | Central Expressway |
-| `ECP` | East Coast Parkway |
-| `SLE` | Seletar Expressway |
-| `BKE` | Bukit Timah Expressway |
-| `KPE` | Kallang–Paya Lebar Expressway |
-| `MCE` | Marina Coastal Expressway |
-| `TPE` | Tampines Expressway |
-| `AYE` | Ayer Rajah Expressway |
+Highways are discovered **dynamically** at startup by querying OSM for all ways tagged
+`highway=motorway` within Singapore's bounding box.
+Zone `name` = `tags.name` as returned by OSM.
+
+Examples of highways that will be discovered: "Pan Island Expressway",
+"Central Expressway", "East Coast Parkway", "Ayer Rajah Expressway", and all
+other named motorways in Singapore.
 
 ---
 
@@ -301,9 +313,11 @@ public record ZoneSeedEntry(String name, String category, String wkt) {}
 public class ZoneSeedService {
 
     private final ZoneRepository zoneRepository;
-    private final WebClient webClient;
-    private final String onemapUrl;               // from config
-    private final String onemapToken;             // from config
+    private final WebClient.Builder webClientBuilder;
+    private final String onemapUrl;        // from config
+    private final String onemapToken;      // from config
+    private final String overpassUrl;      // from config
+    private final String overpassBbox;     // from config, e.g. "1.1,103.5,1.5,104.1"
 
     /** Entry point called by ZoneDataInitializer. */
     public Mono<Void> seedIfEmpty() {
@@ -317,8 +331,14 @@ public class ZoneSeedService {
                 });
     }
 
+    /**
+     * Fetches districts (OneMap) and roads/highways (Overpass) in parallel,
+     * merges the results, and batch-inserts into the zones table.
+     */
     private Mono<Void> loadAndInsert() {
-        return fetchFromOnemap()
+        return Mono.zip(fetchFromOnemap(), fetchFromOverpass())
+                .map(t -> { List<ZoneSeedEntry> all = new ArrayList<>(t.getT1());
+                            all.addAll(t.getT2()); return all; })
                 .flatMapMany(zoneRepository::batchInsert)
                 .doOnNext(n -> log.debug("inserted {} zone row(s)", n))
                 .then()
@@ -327,6 +347,40 @@ public class ZoneSeedService {
 
     /** Fetch Singapore planning areas from OneMap and convert to WKT entries. */
     private Mono<List<ZoneSeedEntry>> fetchFromOnemap() { ... }
+
+    /**
+     * Fetch all named expressways (highway=motorway) and arterial roads
+     * (highway=trunk|primary) from OSM Overpass API.
+     *
+     * Strategy:
+     *   1. POST two Overpass QL queries (one per highway type class).
+     *   2. Parse each response's elements[].{tags.name, geometry[]{lat,lon}}.
+     *   3. Skip any way whose tags.name is blank (unnamed ramps / slip roads).
+     *   4. Group ways by tags.name → Map<String, List<wayCoords>>.
+     *   5. Per road name: build MULTILINESTRING((lon lat,...),(lon lat,...)) WKT.
+     *      Note: Overpass returns {lat,lon}; WKT requires (lon lat) — swap the pair.
+     *   6. Return combined List<ZoneSeedEntry> for all discovered roads/highways.
+     *
+     * On error: log warning and return empty list so district seeding is not blocked.
+     */
+    private Mono<List<ZoneSeedEntry>> fetchFromOverpass() {
+        Mono<List<ZoneSeedEntry>> highways = fetchOverpassByType(
+                "way[\"highway\"=\"motorway\"][\"name\"](" + overpassBbox + ");",
+                "highway");
+        Mono<List<ZoneSeedEntry>> roads = fetchOverpassByType(
+                "way[\"highway\"~\"trunk|primary\"][\"name\"](" + overpassBbox + ");",
+                "road");
+        return Mono.zip(highways, roads)
+                .map(t -> { List<ZoneSeedEntry> all = new ArrayList<>(t.getT1());
+                            all.addAll(t.getT2()); return all; })
+                .onErrorResume(ex -> { log.warn("Overpass fetch failed: {}", ex.getMessage()); return Mono.just(List.of()); });
+    }
+
+    /**
+     * Executes one Overpass QL query, groups resulting ways by tags.name,
+     * and builds one ZoneSeedEntry (MULTILINESTRING WKT) per named road.
+     */
+    private Mono<List<ZoneSeedEntry>> fetchOverpassByType(String qlBody, String category) { ... }
 }
 ```
 
@@ -402,9 +456,11 @@ Response:
 zone:
   seed:
     onemap:
-      enabled: true
       planning-areas-url: https://www.onemap.gov.sg/api/public/popapi/getAllPlanningarea
       token: <onemap-jwt-token>
+    overpass:
+      url: https://overpass-api.de/api/interpreter
+      bounding-box: "1.1,103.5,1.5,104.1"   # south,west,north,east — covers all of Singapore
 ```
 
 ---
@@ -415,7 +471,7 @@ zone:
 |----------|--------------------|--------|
 | Production | OneMap Planning Areas API | Authoritative, official boundaries |
 | Custom zone needed | Admin SQL `INSERT` or future admin API | One-off additions |
-| Road/highway geometries | OSM Overpass API | URA doesn't publish road LineStrings |
+| Road/highway geometries | OSM Overpass API (tag-based discovery, all named ways) | URA doesn't publish road LineStrings; Overpass covers all named roads dynamically |
 
 ---
 
@@ -450,7 +506,7 @@ SELECT name, ST_GeometryType(geog::geometry) FROM zones WHERE category = 'highwa
 ```
 Step 1  Create Zone.java domain entity
 Step 2  Create ZoneRepository.java (hasAnyZone, existsByName, batchInsert)
-Step 3  Create ZoneSeedService.java (OneMap fetch → WKT insert)
+Step 3  Create ZoneSeedService.java (OneMap district fetch + Overpass tag-based road/highway fetch → WKT insert)
 Step 4  Create ZoneDataInitializer.java (ApplicationRunner)
 Step 5  Add zone.seed config block to application.yml
 Step 6  Update TaxiQueryService.countInZone() to check existence → 404
