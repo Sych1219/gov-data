@@ -79,13 +79,6 @@ way["name"="Pan Island Expressway"]["highway"~"motorway"](1.2,103.6,1.5,104.0);
 out geom;
 ```
 
-### 3.3 Fallback — Static GeoJSON seed file
-
-For a low-dependency, always-available baseline, include a hand-curated
-`zones-seed.json` (checked into source control) with approximate geometries
-for the most commonly queried zones. This ensures the service works even if
-external APIs are unavailable at startup.
-
 ---
 
 ## 4. Zone Catalog
@@ -196,9 +189,8 @@ Phase 2 ── ZoneDataInitializer @Component
        │       │   NO  → skip (idempotent)
        │       │   YES → load seed data
        │       │
-       │       └─ Seed Source Priority:
-       │           1. OneMap Planning Areas API  (online, authoritative)
-       │           2. Bundled zones-seed.json    (offline fallback)
+       │       └─ Seed Source:
+       │           OneMap Planning Areas API  (authoritative)
        │
        ▼
 Service Ready
@@ -225,8 +217,6 @@ src/main/
 │   │   └── ZoneRepository.java         ← count(), existsByName(), batchInsert()
 │   └── service/
 │       └── ZoneSeedService.java        ← orchestrates fetch + insert
-└── resources/
-    └── zones-seed.json                 ← bundled fallback GeoJSON FeatureCollection
 ```
 
 ### 6.2 Modified Files
@@ -312,9 +302,8 @@ public class ZoneSeedService {
 
     private final ZoneRepository zoneRepository;
     private final WebClient webClient;
-    private final boolean onemapEnabled;          // from config
     private final String onemapUrl;               // from config
-    private final Resource seedFile;              // classpath:zones-seed.json
+    private final String onemapToken;             // from config
 
     /** Entry point called by ZoneDataInitializer. */
     public Mono<Void> seedIfEmpty() {
@@ -329,14 +318,7 @@ public class ZoneSeedService {
     }
 
     private Mono<Void> loadAndInsert() {
-        Mono<List<ZoneSeedEntry>> source = onemapEnabled
-                ? fetchFromOnemap().onErrorResume(ex -> {
-                    log.warn("OneMap fetch failed ({}), falling back to bundled seed", ex.getMessage());
-                    return loadFromFile();
-                  })
-                : loadFromFile();
-
-        return source
+        return fetchFromOnemap()
                 .flatMapMany(zoneRepository::batchInsert)
                 .doOnNext(n -> log.debug("inserted {} zone row(s)", n))
                 .then()
@@ -345,9 +327,6 @@ public class ZoneSeedService {
 
     /** Fetch Singapore planning areas from OneMap and convert to WKT entries. */
     private Mono<List<ZoneSeedEntry>> fetchFromOnemap() { ... }
-
-    /** Parse bundled zones-seed.json from classpath resources. */
-    private Mono<List<ZoneSeedEntry>> loadFromFile() { ... }
 }
 ```
 
@@ -371,56 +350,7 @@ public class ZoneDataInitializer implements ApplicationRunner {
 }
 ```
 
-### 7.5 `zones-seed.json` — Bundled Fallback
-
-Stored at `src/main/resources/zones-seed.json`. Format is a GeoJSON `FeatureCollection`
-where each feature has `name` and `category` properties and a `Polygon` or `LineString`
-geometry. Approximate polygons are sufficient for zone queries; they do not need to match
-URA boundaries exactly.
-
-```json
-{
-  "type": "FeatureCollection",
-  "features": [
-    {
-      "type": "Feature",
-      "properties": { "name": "CBD", "category": "district" },
-      "geometry": {
-        "type": "Polygon",
-        "coordinates": [[
-          [103.8198, 1.2789],
-          [103.8547, 1.2789],
-          [103.8547, 1.2966],
-          [103.8198, 1.2966],
-          [103.8198, 1.2789]
-        ]]
-      }
-    },
-    {
-      "type": "Feature",
-      "properties": { "name": "PIE", "category": "highway" },
-      "geometry": {
-        "type": "LineString",
-        "coordinates": [
-          [103.6780, 1.3400],
-          [103.7200, 1.3350],
-          [103.7700, 1.3300],
-          [103.8200, 1.3200],
-          [103.8700, 1.3100],
-          [103.9200, 1.3050]
-        ]
-      }
-    }
-    // ... remaining zones
-  ]
-}
-```
-
-> Road/highway zones store a `LineString`. The existing `countNearRoad` query uses
-> `ST_DWithin` (distance buffer), not `ST_Within`, so a LineString geometry is correct.
-> District zones store a `Polygon` for use with `ST_Within`.
-
-### 7.6 Fix Silent Zero in `TaxiQueryService.java`
+### 7.5 Fix Silent Zero in `TaxiQueryService.java`
 
 Add a zone-existence check before running the spatial query:
 
@@ -443,7 +373,7 @@ public Mono<TaxiZoneCountResponse> countInZone(String zoneName, String datetime)
 This surfaces a `404 Not Found` when the zone name is invalid, making the API
 unambiguous (zero taxis vs. unknown zone).
 
-### 7.7 Optional: `GET /api/v1/zones` listing endpoint
+### 7.6 Optional: `GET /api/v1/zones` listing endpoint
 
 A lightweight endpoint to let callers discover valid zone names:
 
@@ -474,7 +404,7 @@ zone:
     onemap:
       enabled: true
       planning-areas-url: https://www.onemap.gov.sg/api/public/popapi/getAllPlanningarea
-    fallback-file: classpath:zones-seed.json
+      token: <onemap-jwt-token>
 ```
 
 ---
@@ -483,10 +413,9 @@ zone:
 
 | Scenario | Recommended Source | Reason |
 |----------|--------------------|--------|
-| Production (internet access) | OneMap Planning Areas API | Authoritative, official boundaries |
-| CI / offline testing | Bundled `zones-seed.json` | No network dependency |
+| Production | OneMap Planning Areas API | Authoritative, official boundaries |
 | Custom zone needed | Admin SQL `INSERT` or future admin API | One-off additions |
-| Road/highway geometries | OSM Overpass API or bundled WKT | URA doesn't publish road LineStrings |
+| Road/highway geometries | OSM Overpass API | URA doesn't publish road LineStrings |
 
 ---
 
@@ -521,14 +450,12 @@ SELECT name, ST_GeometryType(geog::geometry) FROM zones WHERE category = 'highwa
 ```
 Step 1  Create Zone.java domain entity
 Step 2  Create ZoneRepository.java (hasAnyZone, existsByName, batchInsert)
-Step 3  Create zones-seed.json with CBD + all expressways as baseline
-Step 4  Create ZoneSeedService.java (file loader first, OneMap fetch second)
-Step 5  Create ZoneDataInitializer.java (ApplicationRunner)
-Step 6  Add zone.seed config block to application.yml
-Step 7  Update TaxiQueryService.countInZone() to check existence → 404
-Step 8  (Optional) Add GET /api/v1/zones listing endpoint
-Step 9  Run verification queries against dev DB
-Step 10 Enrich zones-seed.json with full polygon list once OneMap fetch is validated
+Step 3  Create ZoneSeedService.java (OneMap fetch → WKT insert)
+Step 4  Create ZoneDataInitializer.java (ApplicationRunner)
+Step 5  Add zone.seed config block to application.yml
+Step 6  Update TaxiQueryService.countInZone() to check existence → 404
+Step 7  (Optional) Add GET /api/v1/zones listing endpoint
+Step 8  Run verification queries against dev DB
 ```
 
 ---
