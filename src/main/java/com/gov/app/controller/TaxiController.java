@@ -15,6 +15,7 @@ import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Positive;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
@@ -22,6 +23,7 @@ import reactor.core.publisher.Mono;
 
 import java.util.Map;
 
+@Slf4j
 @Tag(name = "Taxi Availability", description = "Real-time and historical taxi position queries")
 @RestController
 @RequestMapping("/api/v1/taxis")
@@ -53,6 +55,7 @@ public class TaxiController {
 
             @Parameter(description = "Target time ISO-8601 SGT. Defaults to latest snapshot.", example = "2025-01-15T08:30:00+08:00")
             @RequestParam(required = false) String datetime) {
+        log.info("GET /nearby/count - lat={}, lon={}, radius={}, datetime={}", lat, lon, radius, datetime);
         return queryService.countNearby(lat, lon, radius, datetime);
     }
 
@@ -80,6 +83,7 @@ public class TaxiController {
 
             @Parameter(description = "Target time ISO-8601 SGT. Defaults to latest snapshot.", example = "2025-01-15T08:30:00+08:00")
             @RequestParam(required = false) String datetime) {
+        log.info("GET /nearby - lat={}, lon={}, radius={}, limit={}, datetime={}", lat, lon, radius, limit, datetime);
         return queryService.listNearby(lat, lon, radius, limit, datetime);
     }
 
@@ -104,6 +108,7 @@ public class TaxiController {
 
             @Parameter(description = "Target time ISO-8601 SGT. Defaults to latest snapshot.", example = "2025-01-15T08:30:00+08:00")
             @RequestParam(required = false) String datetime) {
+        log.info("GET /nearest - lat={}, lon={}, limit={}, datetime={}", lat, lon, limit, datetime);
         return queryService.findNearest(lat, lon, limit, datetime);
     }
 
@@ -124,6 +129,7 @@ public class TaxiController {
 
             @Parameter(description = "Target time ISO-8601 SGT. Defaults to latest snapshot.", example = "2025-01-15T08:30:00+08:00")
             @RequestParam(required = false) String datetime) {
+        log.info("GET /zone/{}/count - datetime={}", zoneName, datetime);
         return queryService.countInZone(zoneName, datetime);
     }
 
@@ -141,6 +147,7 @@ public class TaxiController {
                 description = "GeoJSON Polygon geometry and optional target datetime",
                 required = true)
             @Valid @RequestBody TaxiPolygonRequest request) {
+        log.info("POST /polygon/count - datetime={}", request.getDatetime());
         String polygonJson;
         try {
             polygonJson = objectMapper.writeValueAsString(request.getPolygon());
@@ -169,6 +176,7 @@ public class TaxiController {
 
             @Parameter(description = "Target time ISO-8601 SGT. Defaults to latest snapshot.", example = "2025-01-15T08:30:00+08:00")
             @RequestParam(required = false) String datetime) {
+        log.info("GET /road/{}/count - buffer_m={}, datetime={}", roadName, buffer_m, datetime);
         return queryService.countNearRoad(roadName, buffer_m, datetime)
                 .map(count -> Map.of("road", roadName, "taxi_count", count));
     }
@@ -187,6 +195,7 @@ public class TaxiController {
                 description = "GeoJSON LineString route, buffer distance, and optional target datetime",
                 required = true)
             @Valid @RequestBody TaxiRouteRequest request) {
+        log.info("POST /route/count - buffer_m={}, datetime={}", request.getBufferM(), request.getDatetime());
         String routeJson;
         try {
             routeJson = objectMapper.writeValueAsString(request.getRoute());
@@ -215,6 +224,7 @@ public class TaxiController {
 
             @Parameter(description = "Optional zone filter, e.g. 'CBD'")
             @RequestParam(required = false) String zone) {
+        log.info("GET /history/snapshots - start={}, end={}, zone={}", start, end, zone);
         return queryService.getHistory(start, end, zone);
     }
 
@@ -226,6 +236,7 @@ public class TaxiController {
     public Mono<Map<String, Object>> recentActivity(
             @Parameter(description = "Look-back window in minutes", example = "15")
             @RequestParam(defaultValue = "15") int minutes) {
+        log.info("GET /history/recent - minutes={}", minutes);
         return queryService.getRecentDelta(minutes)
                 .map(delta -> Map.of("delta", delta, "minutes", minutes));
     }
