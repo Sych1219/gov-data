@@ -124,8 +124,17 @@ public class TaxiQueryService {
     // ── Road count ─────────────────────────────────────────────────────────────
 
     public Mono<Long> countNearRoad(String roadName, int bufferM, String datetime) {
-        return resolveSnapshot(datetime)
-                .flatMap(snapshot -> positionRepository.countNearRoad(snapshot.getId(), roadName, bufferM));
+        return zoneRepository.findBestRoadMatch(roadName, 0.3)
+                .switchIfEmpty(
+                        zoneRepository.findRoadSuggestions(roadName, 3)
+                                .collectList()
+                                .flatMap(suggestions -> Mono.error(new NotFoundException(
+                                        "Road not found: '" + roadName + "'. " +
+                                        "Did you mean: " + suggestions + "? " +
+                                        "Check GET /api/v1/zones?category=road for all available road names.")))
+                )
+                .flatMap(resolvedName -> resolveSnapshot(datetime)
+                        .flatMap(snapshot -> positionRepository.countNearRoad(snapshot.getId(), resolvedName, bufferM)));
     }
 
     // ── Route count ────────────────────────────────────────────────────────────
@@ -158,7 +167,7 @@ public class TaxiQueryService {
                     .map(entries -> TaxiHistoryResponse.builder().snapshots(entries).build());
         }
 
-        // With zone filter: use DatabaseClient for the join query
+        // With zone filter: resolve zone name via fuzzy match, then run the join query
         String sql = """
                 SELECT ts.api_timestamp, COUNT(tp.id) AS zone_taxi_count
                 FROM taxi_snapshots ts
@@ -170,8 +179,17 @@ public class TaxiQueryService {
                 ORDER BY ts.api_timestamp
                 """;
 
-        return db.sql(sql)
-                .bind("zoneName", zoneName)
+        return zoneRepository.findBestMatch(zoneName, 0.3)
+                .switchIfEmpty(
+                        zoneRepository.findSuggestions(zoneName, 3)
+                                .collectList()
+                                .flatMap(suggestions -> Mono.error(new NotFoundException(
+                                        "Zone not found: '" + zoneName + "'. " +
+                                        "Did you mean: " + suggestions + "? " +
+                                        "Check GET /api/v1/zones for all available zone names.")))
+                )
+                .flatMap(resolvedName -> db.sql(sql)
+                .bind("zoneName", resolvedName)
                 .bind("start", startTime)
                 .bind("end", endTime)
                 .map(row -> TaxiHistoryResponse.SnapshotEntry.builder()
@@ -180,7 +198,7 @@ public class TaxiQueryService {
                         .build())
                 .all()
                 .collectList()
-                .map(entries -> TaxiHistoryResponse.builder().snapshots(entries).build());
+                .map(entries -> TaxiHistoryResponse.builder().snapshots(entries).build()));
     }
 
     // ── Recent activity ────────────────────────────────────────────────────────
