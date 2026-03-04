@@ -124,6 +124,26 @@ public class ZoneRepository {
                 .all();
     }
 
+    /**
+     * Returns the best-matching zone (any category) whose trigram similarity exceeds {@code threshold}.
+     * Useful for resolving an unknown name before deciding which endpoint to call.
+     */
+    public Mono<Zone> findBestAnyMatch(String input, double threshold) {
+        return db.sql("""
+                SELECT name, category FROM zones
+                WHERE similarity(name, :q) > :threshold
+                ORDER BY similarity(name, :q) DESC
+                LIMIT 1
+                """)
+                .bind("q", input)
+                .bind("threshold", threshold)
+                .map(row -> Zone.builder()
+                        .name(row.get("name", String.class))
+                        .category(row.get("category", String.class))
+                        .build())
+                .one();
+    }
+
     /** Returns zones filtered by category. */
     public Flux<Zone> findByCategory(String category) {
         return db.sql("SELECT id, name, category FROM zones WHERE category = :category ORDER BY name")

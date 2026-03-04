@@ -1,6 +1,9 @@
 package com.gov.app.controller;
 
+import com.gov.app.domain.Zone;
 import com.gov.app.dto.ZoneListResponse;
+import com.gov.app.dto.ZoneResolveResponse;
+import com.gov.app.exception.NotFoundException;
 import com.gov.app.repository.ZoneRepository;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -38,5 +41,35 @@ public class ZoneController {
                 .map(z -> new ZoneListResponse.ZoneEntry(z.getName(), z.getCategory()))
                 .collectList()
                 .map(ZoneListResponse::new);
+    }
+
+    @Operation(
+            summary = "Resolve a place name to its category and suggested endpoint",
+            description = "Fuzzy-matches a name across all categories (district, road, highway) and returns " +
+                    "the canonical name, its category, and the recommended API endpoint to call. " +
+                    "Use this before calling a taxi query endpoint when you are unsure whether a name refers to a district or a road."
+    )
+    @GetMapping("/resolve")
+    public Mono<ZoneResolveResponse> resolve(
+            @Parameter(description = "Place name to resolve, e.g. 'AYE', 'CBD', 'Orchard Road'", example = "AYE")
+            @RequestParam String name) {
+
+        return zoneRepository.findBestAnyMatch(name, 0.3)
+                .map(zone -> ZoneResolveResponse.builder()
+                        .name(zone.getName())
+                        .category(zone.getCategory())
+                        .suggestedEndpoint(suggestedEndpoint(zone))
+                        .build())
+                .switchIfEmpty(Mono.error(new NotFoundException(
+                        "No match found for '" + name + "'. " +
+                        "Check GET /api/v1/zones for all available names.")));
+    }
+
+    private String suggestedEndpoint(Zone zone) {
+        return switch (zone.getCategory()) {
+            case "district" -> "GET /api/v1/taxis/zone/" + zone.getName() + "/count";
+            case "road", "highway" -> "GET /api/v1/taxis/road/" + zone.getName() + "/count";
+            default -> "GET /api/v1/zones";
+        };
     }
 }

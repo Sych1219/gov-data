@@ -98,12 +98,18 @@ public class TaxiQueryService {
     public Mono<TaxiZoneCountResponse> countInZone(String zoneName, String datetime) {
         return zoneRepository.findBestDistrictMatch(zoneName, 0.3)
                 .switchIfEmpty(
-                        zoneRepository.findDistrictSuggestions(zoneName, 3)
-                                .collectList()
-                                .flatMap(suggestions -> Mono.error(new NotFoundException(
-                                        "Zone not found: '" + zoneName + "'. " +
-                                        "Did you mean: " + suggestions + "? " +
-                                        "Check GET /api/v1/zones for all available zone names.")))
+                        zoneRepository.findBestRoadMatch(zoneName, 0.3)
+                                .flatMap(roadMatch -> Mono.<String>error(new NotFoundException(
+                                        "'" + zoneName + "' is not a district — it matched a road/highway '" + roadMatch + "'. " +
+                                        "Use GET /api/v1/taxis/road/" + roadMatch + "/count instead.")))
+                                .switchIfEmpty(
+                                        zoneRepository.findDistrictSuggestions(zoneName, 3)
+                                                .collectList()
+                                                .flatMap(suggestions -> Mono.error(new NotFoundException(
+                                                        "Zone not found: '" + zoneName + "'. " +
+                                                        "Did you mean: " + suggestions + "? " +
+                                                        "Check GET /api/v1/zones for all available zone names.")))
+                                )
                 )
                 .flatMap(resolvedName -> resolveSnapshot(datetime)
                         .flatMap(snapshot -> positionRepository.countInZone(snapshot.getId(), resolvedName)
