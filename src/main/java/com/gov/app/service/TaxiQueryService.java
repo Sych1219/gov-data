@@ -96,9 +96,9 @@ public class TaxiQueryService {
     // ── Zone count ─────────────────────────────────────────────────────────────
 
     public Mono<TaxiZoneCountResponse> countInZone(String zoneName, String datetime) {
-        return zoneRepository.findBestMatch(zoneName, 0.3)
+        return zoneRepository.findBestDistrictMatch(zoneName, 0.3)
                 .switchIfEmpty(
-                        zoneRepository.findSuggestions(zoneName, 3)
+                        zoneRepository.findDistrictSuggestions(zoneName, 3)
                                 .collectList()
                                 .flatMap(suggestions -> Mono.error(new NotFoundException(
                                         "Zone not found: '" + zoneName + "'. " +
@@ -179,9 +179,9 @@ public class TaxiQueryService {
                 ORDER BY ts.api_timestamp
                 """;
 
-        return zoneRepository.findBestMatch(zoneName, 0.3)
+        return zoneRepository.findBestDistrictMatch(zoneName, 0.3)
                 .switchIfEmpty(
-                        zoneRepository.findSuggestions(zoneName, 3)
+                        zoneRepository.findDistrictSuggestions(zoneName, 3)
                                 .collectList()
                                 .flatMap(suggestions -> Mono.error(new NotFoundException(
                                         "Zone not found: '" + zoneName + "'. " +

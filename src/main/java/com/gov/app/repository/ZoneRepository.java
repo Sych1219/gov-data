@@ -61,13 +61,14 @@ public class ZoneRepository {
     }
 
     /**
-     * Returns the best-matching zone name whose trigram similarity to {@code input}
+     * Returns the best-matching district name whose trigram similarity to {@code input}
      * exceeds {@code threshold} (0.0–1.0). Returns empty if nothing qualifies.
      */
-    public Mono<String> findBestMatch(String input, double threshold) {
+    public Mono<String> findBestDistrictMatch(String input, double threshold) {
         return db.sql("""
                 SELECT name FROM zones
-                WHERE similarity(name, :q) > :threshold
+                WHERE category = 'district'
+                  AND similarity(name, :q) > :threshold
                 ORDER BY similarity(name, :q) DESC
                 LIMIT 1
                 """)
@@ -77,10 +78,11 @@ public class ZoneRepository {
                 .one();
     }
 
-    /** Returns the top {@code limit} zone names closest to {@code input} by trigram similarity. */
-    public Flux<String> findSuggestions(String input, int limit) {
+    /** Returns the top {@code limit} district names closest to {@code input} by trigram similarity. */
+    public Flux<String> findDistrictSuggestions(String input, int limit) {
         return db.sql("""
                 SELECT name FROM zones
+                WHERE category = 'district'
                 ORDER BY similarity(name, :q) DESC
                 LIMIT :limit
                 """)
