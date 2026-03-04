@@ -494,9 +494,17 @@ SELECT ST_Within(
 );
 -- Expected: true
 
--- 4. Verify road zone is a LineString
+-- 4. Verify highway zones are MultiLineStrings (multiple OSM way segments merged per road)
 SELECT name, ST_GeometryType(geog::geometry) FROM zones WHERE category = 'highway';
--- Expected: ST_LineString
+-- Expected: ST_MultiLineString
+
+-- 5. Spot-check a known PIE coordinate falls within 500m of the stored geometry
+SELECT ST_DWithin(
+    ST_SetSRID(ST_MakePoint(103.72, 1.335), 4326)::geography,
+    (SELECT geog FROM zones WHERE name = 'Pan Island Expressway'),
+    500
+);
+-- Expected: true
 ```
 
 ---
