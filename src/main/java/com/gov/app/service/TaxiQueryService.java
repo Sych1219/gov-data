@@ -10,9 +10,11 @@ import com.gov.app.repository.ZoneRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.r2dbc.core.DatabaseClient;
 import org.springframework.stereotype.Service;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.time.OffsetDateTime;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -44,34 +46,19 @@ public class TaxiQueryService {
                 .switchIfEmpty(Mono.error(new NotFoundException("No snapshot available at or before " + datetime)));
     }
 
-    // ── Count taxis within radius ──────────────────────────────────────────────
+    // ── Taxis within radius (count + locations) ────────────────────────────────
 
-    public Mono<TaxiNearbyCountResponse> countNearby(double lat, double lon, int radiusM, String datetime) {
+    public Mono<TaxiNearbyCountResponse> nearby(double lat, double lon, int radiusM, int limit, String datetime) {
         return resolveSnapshot(datetime)
-                .flatMap(snapshot -> positionRepository.countNearby(snapshot.getId(), lat, lon, radiusM)
-                        .map(count -> TaxiNearbyCountResponse.builder()
+                .flatMap(snapshot -> Mono.zip(
+                        positionRepository.countNearby(snapshot.getId(), lat, lon, radiusM),
+                        toFeatureList(positionRepository.listNearby(snapshot.getId(), lat, lon, radiusM, limit)),
+                        (count, features) -> TaxiNearbyCountResponse.builder()
                                 .taxiCount(count)
                                 .snapshotTime(snapshot.getApiTimestamp())
                                 .query(TaxiNearbyCountResponse.QueryParams.builder()
                                         .lat(lat).lon(lon).radiusM(radiusM).build())
-                                .build()));
-    }
-
-    // ── List taxis within radius ───────────────────────────────────────────────
-
-    public Mono<TaxiNearbyListResponse> listNearby(double lat, double lon, int radiusM, int limit, String datetime) {
-        return resolveSnapshot(datetime)
-                .flatMap(snapshot -> positionRepository
-                        .listNearby(snapshot.getId(), lat, lon, radiusM, limit)
-                        .map(coord -> TaxiNearbyListResponse.Feature.builder()
-                                .geometry(TaxiNearbyListResponse.Geometry.builder()
-                                        .coordinates(coord)
-                                        .build())
-                                .build())
-                        .collectList()
-                        .map(features -> TaxiNearbyListResponse.builder()
-                                .features(features)
-                                .snapshotTime(snapshot.getApiTimestamp())
+                                .locations(GeoJsonFeatureCollection.builder().features(features).build())
                                 .build()));
     }
 
@@ -81,15 +68,23 @@ public class TaxiQueryService {
         return resolveSnapshot(datetime)
                 .flatMap(snapshot -> positionRepository
                         .findNearest(snapshot.getId(), lat, lon, limit)
-                        .map(row -> TaxiNearestResponse.TaxiPoint.builder()
-                                .longitude(row[0])
-                                .latitude(row[1])
-                                .distanceM(row[2])
+                        .map(row -> TaxiNearestResponse.Feature.builder()
+                                .geometry(TaxiNearestResponse.Geometry.builder()
+                                        .coordinates(new double[]{row[0], row[1]})
+                                        .build())
+                                .properties(TaxiNearestResponse.Properties.builder()
+                                        .distanceM(row[2])
+                                        .build())
                                 .build())
                         .collectList()
-                        .map(taxis -> TaxiNearestResponse.builder()
-                                .taxis(taxis)
+                        .map(features -> TaxiNearestResponse.builder()
+                                .taxiCount(features.size())
                                 .snapshotTime(snapshot.getApiTimestamp())
+                                .query(TaxiNearestResponse.QueryParams.builder()
+                                        .lat(lat).lon(lon).limit(limit).build())
+                                .locations(TaxiNearestResponse.Locations.builder()
+                                        .features(features)
+                                        .build())
                                 .build()));
     }
 
@@ -112,24 +107,34 @@ public class TaxiQueryService {
                                 )
                 )
                 .flatMap(resolvedName -> resolveSnapshot(datetime)
-                        .flatMap(snapshot -> positionRepository.countInZone(snapshot.getId(), resolvedName)
-                                .map(count -> TaxiZoneCountResponse.builder()
+                        .flatMap(snapshot -> Mono.zip(
+                                positionRepository.countInZone(snapshot.getId(), resolvedName),
+                                toFeatureList(positionRepository.listInZone(snapshot.getId(), resolvedName)),
+                                (count, features) -> TaxiZoneCountResponse.builder()
                                         .zone(resolvedName)
                                         .taxiCount(count)
                                         .snapshotTime(snapshot.getApiTimestamp())
+                                        .locations(GeoJsonFeatureCollection.builder().features(features).build())
                                         .build())));
     }
 
     // ── Custom polygon count ───────────────────────────────────────────────────
 
-    public Mono<Long> countInPolygon(String polygonGeoJson, String datetime) {
+    public Mono<TaxiPolygonCountResponse> countInPolygon(String polygonGeoJson, String datetime) {
         return resolveSnapshot(datetime)
-                .flatMap(snapshot -> positionRepository.countInPolygon(snapshot.getId(), polygonGeoJson));
+                .flatMap(snapshot -> Mono.zip(
+                        positionRepository.countInPolygon(snapshot.getId(), polygonGeoJson),
+                        toFeatureList(positionRepository.listInPolygon(snapshot.getId(), polygonGeoJson)),
+                        (count, features) -> TaxiPolygonCountResponse.builder()
+                                .taxiCount(count)
+                                .snapshotTime(snapshot.getApiTimestamp())
+                                .locations(GeoJsonFeatureCollection.builder().features(features).build())
+                                .build()));
     }
 
     // ── Road count ─────────────────────────────────────────────────────────────
 
-    public Mono<Long> countNearRoad(String roadName, int bufferM, String datetime) {
+    public Mono<TaxiRoadCountResponse> countNearRoad(String roadName, int bufferM, String datetime) {
         return zoneRepository.findBestRoadMatch(roadName, 0.3)
                 .switchIfEmpty(
                         zoneRepository.findRoadSuggestions(roadName, 3)
@@ -140,14 +145,30 @@ public class TaxiQueryService {
                                         "Check GET /api/v1/zones?category=road for all available road names.")))
                 )
                 .flatMap(resolvedName -> resolveSnapshot(datetime)
-                        .flatMap(snapshot -> positionRepository.countNearRoad(snapshot.getId(), resolvedName, bufferM)));
+                        .flatMap(snapshot -> Mono.zip(
+                                positionRepository.countNearRoad(snapshot.getId(), resolvedName, bufferM),
+                                toFeatureList(positionRepository.listNearRoad(snapshot.getId(), resolvedName, bufferM)),
+                                (count, features) -> TaxiRoadCountResponse.builder()
+                                        .road(resolvedName)
+                                        .taxiCount(count)
+                                        .snapshotTime(snapshot.getApiTimestamp())
+                                        .locations(GeoJsonFeatureCollection.builder().features(features).build())
+                                        .build())));
     }
 
     // ── Route count ────────────────────────────────────────────────────────────
 
-    public Mono<Long> countAlongRoute(String routeGeoJson, int bufferM, String datetime) {
+    public Mono<TaxiRouteCountResponse> countAlongRoute(String routeGeoJson, int bufferM, String datetime) {
         return resolveSnapshot(datetime)
-                .flatMap(snapshot -> positionRepository.countAlongRoute(snapshot.getId(), routeGeoJson, bufferM));
+                .flatMap(snapshot -> Mono.zip(
+                        positionRepository.countAlongRoute(snapshot.getId(), routeGeoJson, bufferM),
+                        toFeatureList(positionRepository.listAlongRoute(snapshot.getId(), routeGeoJson, bufferM)),
+                        (count, features) -> TaxiRouteCountResponse.builder()
+                                .taxiCount(count)
+                                .bufferM(bufferM)
+                                .snapshotTime(snapshot.getApiTimestamp())
+                                .locations(GeoJsonFeatureCollection.builder().features(features).build())
+                                .build()));
     }
 
     // ── History snapshots ──────────────────────────────────────────────────────
@@ -205,6 +226,17 @@ public class TaxiQueryService {
                 .all()
                 .collectList()
                 .map(entries -> TaxiHistoryResponse.builder().snapshots(entries).build()));
+    }
+
+    // ── Shared helpers ─────────────────────────────────────────────────────────
+
+    private Mono<List<TaxiNearbyListResponse.Feature>> toFeatureList(Flux<double[]> coords) {
+        return coords.map(coord -> TaxiNearbyListResponse.Feature.builder()
+                        .geometry(TaxiNearbyListResponse.Geometry.builder()
+                                .coordinates(coord)
+                                .build())
+                        .build())
+                .collectList();
     }
 
     // ── Recent activity ────────────────────────────────────────────────────────

@@ -23,6 +23,7 @@ import reactor.core.publisher.Mono;
 
 import java.util.Map;
 
+
 @Slf4j
 @Tag(name = "Taxi Availability", description = "Real-time and historical taxi position queries")
 @RestController
@@ -34,41 +35,16 @@ public class TaxiController {
     private final TaxiQueryService queryService;
     private final ObjectMapper objectMapper;
 
-    /** 4.1 Count taxis within radius */
-    @Operation(summary = "Count taxis within radius",
-               description = "Returns the number of available taxis within `radius` metres of the given coordinate.")
-    @ApiResponses({
-        @ApiResponse(responseCode = "200", description = "Success"),
-        @ApiResponse(responseCode = "400", description = "Invalid query parameters",
-            content = @Content(schema = @Schema(ref = "#/components/schemas/ErrorResponse")))
-    })
-    @GetMapping("/nearby/count")
-    public Mono<TaxiNearbyCountResponse> nearbyCount(
-            @Parameter(description = "Latitude (-90 to 90)", example = "1.3521")
-            @RequestParam @DecimalMin("-90.0") @DecimalMax("90.0") double lat,
-
-            @Parameter(description = "Longitude (-180 to 180)", example = "103.8198")
-            @RequestParam @DecimalMin("-180.0") @DecimalMax("180.0") double lon,
-
-            @Parameter(description = "Search radius in metres", example = "500")
-            @RequestParam @Positive int radius,
-
-            @Parameter(description = "Target time ISO-8601 SGT. Defaults to latest snapshot.", example = "2025-01-15T08:30:00+08:00")
-            @RequestParam(required = false) String datetime) {
-        log.info("GET /nearby/count - lat={}, lon={}, radius={}, datetime={}", lat, lon, radius, datetime);
-        return queryService.countNearby(lat, lon, radius, datetime);
-    }
-
-    /** 4.2 List taxis within radius (GeoJSON FeatureCollection) */
-    @Operation(summary = "List taxis within radius",
-               description = "Returns a GeoJSON FeatureCollection of taxis within `radius` metres.")
+    /** 4.1 Taxis within radius (count + GeoJSON locations) */
+    @Operation(summary = "Taxis within radius",
+               description = "Returns the count and GeoJSON locations of taxis within `radius` metres of the given coordinate.")
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "Success"),
         @ApiResponse(responseCode = "400", description = "Invalid query parameters",
             content = @Content(schema = @Schema(ref = "#/components/schemas/ErrorResponse")))
     })
     @GetMapping("/nearby")
-    public Mono<TaxiNearbyListResponse> nearbyList(
+    public Mono<TaxiNearbyCountResponse> nearby(
             @Parameter(description = "Latitude (-90 to 90)", example = "1.3521")
             @RequestParam @DecimalMin("-90.0") @DecimalMax("90.0") double lat,
 
@@ -78,16 +54,16 @@ public class TaxiController {
             @Parameter(description = "Search radius in metres", example = "500")
             @RequestParam @Positive int radius,
 
-            @Parameter(description = "Max results to return (default 100)", example = "50")
+            @Parameter(description = "Max locations returned (default 100)", example = "50")
             @RequestParam(defaultValue = "100") @Positive int limit,
 
             @Parameter(description = "Target time ISO-8601 SGT. Defaults to latest snapshot.", example = "2025-01-15T08:30:00+08:00")
             @RequestParam(required = false) String datetime) {
         log.info("GET /nearby - lat={}, lon={}, radius={}, limit={}, datetime={}", lat, lon, radius, limit, datetime);
-        return queryService.listNearby(lat, lon, radius, limit, datetime);
+        return queryService.nearby(lat, lon, radius, limit, datetime);
     }
 
-    /** 4.3 Nearest N taxis with distances */
+    /** 4.2 Nearest N taxis with distances */
     @Operation(summary = "Nearest N taxis with distances",
                description = "Returns the N closest available taxis and their distances from the given coordinate.")
     @ApiResponses({
@@ -112,7 +88,7 @@ public class TaxiController {
         return queryService.findNearest(lat, lon, limit, datetime);
     }
 
-    /** 4.4 Count taxis in a named zone */
+    /** 4.3 Count taxis in a named zone */
     @Operation(summary = "Count taxis in a named zone",
                description = "Returns the number of available taxis within the boundaries of the named zone.")
     @ApiResponses({
@@ -133,7 +109,7 @@ public class TaxiController {
         return queryService.countInZone(zoneName, datetime);
     }
 
-    /** 4.5 Count taxis in a custom GeoJSON polygon */
+    /** 4.4 Count taxis in a custom GeoJSON polygon */
     @Operation(summary = "Count taxis in a custom GeoJSON polygon",
                description = "POST a GeoJSON Polygon geometry. Returns the taxi count inside it.")
     @ApiResponses({
@@ -142,7 +118,7 @@ public class TaxiController {
             content = @Content(schema = @Schema(ref = "#/components/schemas/ErrorResponse")))
     })
     @PostMapping(value = "/polygon/count", consumes = MediaType.APPLICATION_JSON_VALUE)
-    public Mono<Map<String, Object>> polygonCount(
+    public Mono<TaxiPolygonCountResponse> polygonCount(
             @io.swagger.v3.oas.annotations.parameters.RequestBody(
                 description = "GeoJSON Polygon geometry and optional target datetime",
                 required = true)
@@ -154,11 +130,10 @@ public class TaxiController {
         } catch (Exception e) {
             return Mono.error(new com.gov.app.exception.ValidationException("Invalid polygon GeoJSON"));
         }
-        return queryService.countInPolygon(polygonJson, request.getDatetime())
-                .map(count -> Map.of("taxi_count", count));
+        return queryService.countInPolygon(polygonJson, request.getDatetime());
     }
 
-    /** 4.6 Count taxis near a named road/highway */
+    /** 4.5 Count taxis near a named road/highway */
     @Operation(summary = "Count taxis near a named road",
                description = "Counts taxis within `buffer_m` metres of the named road or highway.")
     @ApiResponses({
@@ -167,7 +142,7 @@ public class TaxiController {
             content = @Content(schema = @Schema(ref = "#/components/schemas/ErrorResponse")))
     })
     @GetMapping("/road/{roadName}/count")
-    public Mono<Map<String, Object>> roadCount(
+    public Mono<TaxiRoadCountResponse> roadCount(
             @Parameter(description = "Road or highway name, e.g. 'PIE', 'Orchard Road'", example = "PIE")
             @PathVariable String roadName,
 
@@ -177,11 +152,10 @@ public class TaxiController {
             @Parameter(description = "Target time ISO-8601 SGT. Defaults to latest snapshot.", example = "2025-01-15T08:30:00+08:00")
             @RequestParam(required = false) String datetime) {
         log.info("GET /road/{}/count - buffer_m={}, datetime={}", roadName, buffer_m, datetime);
-        return queryService.countNearRoad(roadName, buffer_m, datetime)
-                .map(count -> Map.of("road", roadName, "taxi_count", count));
+        return queryService.countNearRoad(roadName, buffer_m, datetime);
     }
 
-    /** 4.7 Count taxis along a custom route buffer */
+    /** 4.6 Count taxis along a custom route buffer */
     @Operation(summary = "Count taxis along a custom route",
                description = "POST a GeoJSON LineString route. Counts taxis within `buffer_m` metres of the route.")
     @ApiResponses({
@@ -190,7 +164,7 @@ public class TaxiController {
             content = @Content(schema = @Schema(ref = "#/components/schemas/ErrorResponse")))
     })
     @PostMapping(value = "/route/count", consumes = MediaType.APPLICATION_JSON_VALUE)
-    public Mono<Map<String, Object>> routeCount(
+    public Mono<TaxiRouteCountResponse> routeCount(
             @io.swagger.v3.oas.annotations.parameters.RequestBody(
                 description = "GeoJSON LineString route, buffer distance, and optional target datetime",
                 required = true)
@@ -202,11 +176,10 @@ public class TaxiController {
         } catch (Exception e) {
             return Mono.error(new com.gov.app.exception.ValidationException("Invalid route GeoJSON"));
         }
-        return queryService.countAlongRoute(routeJson, request.getBufferM(), request.getDatetime())
-                .map(count -> Map.of("taxi_count", count, "buffer_m", request.getBufferM()));
+        return queryService.countAlongRoute(routeJson, request.getBufferM(), request.getDatetime());
     }
 
-    /** 4.8 Historical snapshots in a time range */
+    /** 4.7 Historical snapshots in a time range */
     @Operation(summary = "Historical snapshots in a time range",
                description = "Returns aggregated taxi count snapshots between `start` and `end`, optionally filtered by zone.")
     @ApiResponses({
@@ -228,7 +201,7 @@ public class TaxiController {
         return queryService.getHistory(start, end, zone);
     }
 
-    /** 4.9 Recent activity delta (taxi count change in last N minutes) */
+    /** 4.8 Recent activity delta (taxi count change in last N minutes) */
     @Operation(summary = "Recent taxi count delta",
                description = "Returns the change in available taxi count over the last N minutes.")
     @ApiResponse(responseCode = "200", description = "Success")

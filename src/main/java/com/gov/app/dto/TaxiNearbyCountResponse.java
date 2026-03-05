@@ -18,6 +18,8 @@ public class TaxiNearbyCountResponse {
 
     QueryParams query;
 
+    GeoJsonFeatureCollection locations;
+
     @Value
     @Builder
     public static class QueryParams {

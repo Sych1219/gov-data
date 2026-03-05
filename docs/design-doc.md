@@ -144,10 +144,10 @@ Base path: `/api/v1/taxis`
 
 ---
 
-### 4.1 📍 Radius Query — Count taxis within a radius
+### 4.1 📍 Radius Query — Taxis within a radius
 
 ```
-GET /api/v1/taxis/nearby/count
+GET /api/v1/taxis/nearby
 ```
 
 | Param | Type | Required | Description |
@@ -156,6 +156,7 @@ GET /api/v1/taxis/nearby/count
 | `lon` | number | ✅ | Centre longitude |
 | `radius` | integer | ✅ | Radius in **metres** |
 | `datetime` | string | ❌ | Target time (SGT) |
+| `limit` | integer | ❌ | Max locations returned, default `100` |
 
 **Core SQL**:
 ```sql
@@ -170,7 +171,7 @@ WHERE ts.id = :snapshotId
       );
 ```
 
-**Example**: `GET /api/v1/taxis/nearby/count?lat=1.3644&lon=103.9915&radius=3000`  
+**Example**: `GET /api/v1/taxis/nearby?lat=1.3644&lon=103.9915&radius=3000`
 → taxis within 3 km of Changi Airport
 
 **Response**:
@@ -178,29 +179,20 @@ WHERE ts.id = :snapshotId
 {
   "taxi_count": 42,
   "snapshot_time": "2026-02-28T08:00:00+08:00",
-  "query": { "lat": 1.3644, "lon": 103.9915, "radius_m": 3000 }
+  "query": { "lat": 1.3644, "lon": 103.9915, "radius_m": 3000 },
+  "locations": {
+    "type": "FeatureCollection",
+    "features": [
+      { "type": "Feature", "geometry": { "type": "Point", "coordinates": [103.992, 1.361] }, "properties": null },
+      { "type": "Feature", "geometry": { "type": "Point", "coordinates": [103.987, 1.365] }, "properties": null }
+    ]
+  }
 }
 ```
 
 ---
 
-### 4.2 📍 Radius Query — List taxis within a radius
-
-```
-GET /api/v1/taxis/nearby
-```
-
-Same parameters as above, plus:
-
-| Param | Type | Required | Description |
-|-------|------|----------|-------------|
-| `limit` | integer | ❌ | Max results, default `100` |
-
-**Response**: GeoJSON `FeatureCollection` of taxi points within the radius.
-
----
-
-### 4.3 📍 Nearest N Taxis
+### 4.2 📍 Nearest N Taxis
 
 ```
 GET /api/v1/taxis/nearest
@@ -229,17 +221,22 @@ LIMIT :limit;
 **Response**:
 ```json
 {
-  "taxis": [
-    { "longitude": 103.820, "latitude": 1.352, "distance_m": 123.4 },
-    { "longitude": 103.821, "latitude": 1.353, "distance_m": 201.0 }
-  ],
-  "snapshot_time": "2026-02-28T08:00:00+08:00"
+  "taxi_count": 2,
+  "snapshot_time": "2026-02-28T08:00:00+08:00",
+  "query": { "lat": 1.3521, "lon": 103.8198, "limit": 5 },
+  "locations": {
+    "type": "FeatureCollection",
+    "features": [
+      { "type": "Feature", "geometry": { "type": "Point", "coordinates": [103.820, 1.352] }, "properties": { "distance_m": 123.4 } },
+      { "type": "Feature", "geometry": { "type": "Point", "coordinates": [103.821, 1.353] }, "properties": { "distance_m": 201.0 } }
+    ]
+  }
 }
 ```
 
 ---
 
-### 4.4 🗺 Zone / District Query
+### 4.3 🗺 Zone / District Query
 
 ```
 GET /api/v1/taxis/zone/{zoneName}/count
@@ -269,13 +266,20 @@ WHERE tp.snapshot_id = :snapshotId
 {
   "zone": "tampines",
   "taxi_count": 187,
-  "snapshot_time": "2026-02-28T08:00:00+08:00"
+  "snapshot_time": "2026-02-28T08:00:00+08:00",
+  "locations": {
+    "type": "FeatureCollection",
+    "features": [
+      { "type": "Feature", "geometry": { "type": "Point", "coordinates": [103.820, 1.352] }, "properties": null },
+      { "type": "Feature", "geometry": { "type": "Point", "coordinates": [103.821, 1.353] }, "properties": null }
+    ]
+  }
 }
 ```
 
 ---
 
-### 4.5 🗺 Custom Polygon Query
+### 4.4 🗺 Custom Polygon Query
 
 ```
 POST /api/v1/taxis/polygon/count
@@ -300,9 +304,23 @@ WHERE tp.snapshot_id = :snapshotId
   AND ST_Within(tp.location, ST_GeomFromGeoJSON(:polygonGeoJson));
 ```
 
+**Response**:
+```json
+{
+  "taxi_count": 23,
+  "snapshot_time": "2026-02-28T08:00:00+08:00",
+  "locations": {
+    "type": "FeatureCollection",
+    "features": [
+      { "type": "Feature", "geometry": { "type": "Point", "coordinates": [103.830, 1.290] }, "properties": null }
+    ]
+  }
+}
+```
+
 ---
 
-### 4.6 🛣 Road / Highway Query
+### 4.5 🛣 Road / Highway Query
 
 ```
 GET /api/v1/taxis/road/{roadName}/count
@@ -332,9 +350,24 @@ WHERE tp.snapshot_id = :snapshotId
 
 **Example**: `GET /api/v1/taxis/road/orchard-road/count?buffer_m=150`
 
+**Response**:
+```json
+{
+  "road": "orchard-road",
+  "taxi_count": 15,
+  "snapshot_time": "2026-02-28T08:00:00+08:00",
+  "locations": {
+    "type": "FeatureCollection",
+    "features": [
+      { "type": "Feature", "geometry": { "type": "Point", "coordinates": [103.832, 1.304] }, "properties": null }
+    ]
+  }
+}
+```
+
 ---
 
-### 4.7 🚗 Route Buffer Query
+### 4.6 🚗 Route Buffer Query
 
 ```
 POST /api/v1/taxis/route/count
@@ -364,9 +397,24 @@ WHERE tp.snapshot_id = :snapshotId
       );
 ```
 
+**Response**:
+```json
+{
+  "taxi_count": 28,
+  "buffer_m": 200,
+  "snapshot_time": "2026-02-28T08:00:00+08:00",
+  "locations": {
+    "type": "FeatureCollection",
+    "features": [
+      { "type": "Feature", "geometry": { "type": "Point", "coordinates": [103.851, 1.290] }, "properties": null }
+    ]
+  }
+}
+```
+
 ---
 
-### 4.8 🕐 Time Range Query
+### 4.7 🕐 Time Range Query
 
 ```
 GET /api/v1/taxis/history/snapshots
@@ -404,7 +452,7 @@ ORDER BY ts.api_timestamp;
 
 ---
 
-### 4.9 🕐 Recent Activity
+### 4.8 🕐 Recent Activity
 
 ```
 GET /api/v1/taxis/history/recent
@@ -418,19 +466,18 @@ Returns total new taxis that appeared in the last N minutes (count difference be
 
 ---
 
-### 4.10 Endpoint Summary Table
+### 4.9 Endpoint Summary Table
 
 | # | Method | Path | Description |
 |---|--------|------|-------------|
-| 1 | GET | `/api/v1/taxis/nearby/count` | Count taxis within radius |
-| 2 | GET | `/api/v1/taxis/nearby` | List taxis within radius (GeoJSON) |
-| 3 | GET | `/api/v1/taxis/nearest` | Nearest N taxis with distance |
-| 4 | GET | `/api/v1/taxis/zone/{zoneName}/count` | Count in named zone |
-| 5 | POST | `/api/v1/taxis/polygon/count` | Count in custom GeoJSON polygon |
-| 6 | GET | `/api/v1/taxis/road/{roadName}/count` | Count near road/highway |
-| 7 | POST | `/api/v1/taxis/route/count` | Count along a route buffer |
-| 8 | GET | `/api/v1/taxis/history/snapshots` | Time-range taxi count history |
-| 9 | GET | `/api/v1/taxis/history/recent` | Recently online taxi delta |
+| 1 | GET | `/api/v1/taxis/nearby` | Taxis within radius (count + GeoJSON) |
+| 2 | GET | `/api/v1/taxis/nearest` | Nearest N taxis with distance |
+| 3 | GET | `/api/v1/taxis/zone/{zoneName}/count` | Count in named zone |
+| 4 | POST | `/api/v1/taxis/polygon/count` | Count in custom GeoJSON polygon |
+| 5 | GET | `/api/v1/taxis/road/{roadName}/count` | Count near road/highway |
+| 6 | POST | `/api/v1/taxis/route/count` | Count along a route buffer |
+| 7 | GET | `/api/v1/taxis/history/snapshots` | Time-range taxi count history |
+| 8 | GET | `/api/v1/taxis/history/recent` | Recently online taxi delta |
 
 ---
 

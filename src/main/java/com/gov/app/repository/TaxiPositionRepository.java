@@ -183,4 +183,87 @@ public class TaxiPositionRepository {
                 .map(row -> row.get("cnt", Long.class))
                 .one();
     }
+
+    /** List taxis within a named zone polygon. Returns rows with longitude and latitude. */
+    public Flux<double[]> listInZone(long snapshotId, String zoneName) {
+        String sql = """
+                SELECT tp.longitude, tp.latitude
+                FROM taxi_positions tp
+                JOIN zones z ON z.name = :zoneName
+                WHERE tp.snapshot_id = :snapshotId
+                  AND ST_Within(tp.geog::geometry, z.geog::geometry)
+                """;
+        return db.sql(sql)
+                .bind("snapshotId", snapshotId)
+                .bind("zoneName", zoneName)
+                .map(row -> new double[]{
+                        row.get("longitude", Double.class),
+                        row.get("latitude", Double.class)
+                })
+                .all();
+    }
+
+    /** List taxis within a custom GeoJSON polygon. Returns rows with longitude and latitude. */
+    public Flux<double[]> listInPolygon(long snapshotId, String polygonGeoJson) {
+        String sql = """
+                SELECT tp.longitude, tp.latitude
+                FROM taxi_positions tp
+                WHERE tp.snapshot_id = :snapshotId
+                  AND ST_Within(
+                        tp.geog::geometry,
+                        ST_GeomFromGeoJSON(:polygon)
+                      )
+                """;
+        return db.sql(sql)
+                .bind("snapshotId", snapshotId)
+                .bind("polygon", polygonGeoJson)
+                .map(row -> new double[]{
+                        row.get("longitude", Double.class),
+                        row.get("latitude", Double.class)
+                })
+                .all();
+    }
+
+    /** List taxis within buffer metres of a named road/highway. Returns rows with longitude and latitude. */
+    public Flux<double[]> listNearRoad(long snapshotId, String roadName, int bufferM) {
+        String sql = """
+                SELECT tp.longitude, tp.latitude
+                FROM taxi_positions tp
+                JOIN zones z ON z.name = :roadName AND z.category IN ('road', 'highway')
+                WHERE tp.snapshot_id = :snapshotId
+                  AND ST_DWithin(tp.geog, z.geog, :bufferM)
+                """;
+        return db.sql(sql)
+                .bind("snapshotId", snapshotId)
+                .bind("roadName", roadName)
+                .bind("bufferM", bufferM)
+                .map(row -> new double[]{
+                        row.get("longitude", Double.class),
+                        row.get("latitude", Double.class)
+                })
+                .all();
+    }
+
+    /** List taxis within buffer metres of a custom GeoJSON LineString route. Returns rows with longitude and latitude. */
+    public Flux<double[]> listAlongRoute(long snapshotId, String routeGeoJson, int bufferM) {
+        String sql = """
+                SELECT tp.longitude, tp.latitude
+                FROM taxi_positions tp
+                WHERE tp.snapshot_id = :snapshotId
+                  AND ST_DWithin(
+                        tp.geog,
+                        ST_GeomFromGeoJSON(:route)::geography,
+                        :bufferM
+                      )
+                """;
+        return db.sql(sql)
+                .bind("snapshotId", snapshotId)
+                .bind("route", routeGeoJson)
+                .bind("bufferM", bufferM)
+                .map(row -> new double[]{
+                        row.get("longitude", Double.class),
+                        row.get("latitude", Double.class)
+                })
+                .all();
+    }
 }

@@ -17,4 +17,6 @@ public class TaxiZoneCountResponse {
 
     @JsonProperty("snapshot_time")
     OffsetDateTime snapshotTime;
+
+    GeoJsonFeatureCollection locations;
 }
