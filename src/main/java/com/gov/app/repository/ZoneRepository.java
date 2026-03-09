@@ -144,6 +144,27 @@ public class ZoneRepository {
                 .one();
     }
 
+    /**
+     * Returns the geometry of a zone as a GeoJSON string (via ST_AsGeoJSON) along with its category.
+     * Works for any category: district (Polygon), road/highway (LineString).
+     */
+    public Mono<ZoneGeometryJson> findGeometryByName(String name) {
+        return db.sql("""
+                SELECT name, category, ST_AsGeoJSON(geog)::text AS geom_json
+                FROM zones
+                WHERE name = :name
+                """)
+                .bind("name", name)
+                .map(row -> new ZoneGeometryJson(
+                        row.get("name", String.class),
+                        row.get("category", String.class),
+                        row.get("geom_json", String.class)))
+                .one();
+    }
+
+    /** Raw geometry result from PostGIS, before JSON parsing. */
+    public record ZoneGeometryJson(String name, String category, String geometryJson) {}
+
     /** Returns zones filtered by category. */
     public Flux<Zone> findByCategory(String category) {
         return db.sql("SELECT id, name, category FROM zones WHERE category = :category ORDER BY name")

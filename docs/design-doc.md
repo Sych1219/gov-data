@@ -466,7 +466,57 @@ Returns total new taxis that appeared in the last N minutes (count difference be
 
 ---
 
-### 4.9 Endpoint Summary Table
+### 4.9 🗺 Zone Geometry
+
+```
+GET /api/v1/zones/{name}/geometry
+```
+
+| Path Param | Description |
+|------------|-------------|
+| `name` | Zone name (fuzzy-matched), e.g. `tampines`, `aye`, `orchard-road` |
+
+Returns a GeoJSON `Feature` with the boundary or path of the zone. **Districts** return a `Polygon`; **roads and highways** return a `LineString`.
+
+Zone geometry is static — the response includes `Cache-Control: max-age=86400`. Clients should cache it and only re-fetch taxi count data on each poll.
+
+**Example**: `GET /api/v1/zones/tampines/geometry`
+
+**Response (district → Polygon)**:
+```json
+{
+  "type": "Feature",
+  "properties": {
+    "name": "tampines",
+    "category": "district"
+  },
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [[[103.80, 1.34], [103.85, 1.34], [103.85, 1.37], [103.80, 1.37], [103.80, 1.34]]]
+  }
+}
+```
+
+**Example**: `GET /api/v1/zones/aye/geometry`
+
+**Response (highway → LineString)**:
+```json
+{
+  "type": "Feature",
+  "properties": {
+    "name": "aye",
+    "category": "highway"
+  },
+  "geometry": {
+    "type": "LineString",
+    "coordinates": [[103.74, 1.28], [103.76, 1.29], [103.80, 1.30]]
+  }
+}
+```
+
+---
+
+### 4.10 Endpoint Summary Table
 
 | # | Method | Path | Description |
 |---|--------|------|-------------|
@@ -478,6 +528,7 @@ Returns total new taxis that appeared in the last N minutes (count difference be
 | 6 | POST | `/api/v1/taxis/route/count` | Count along a route buffer |
 | 7 | GET | `/api/v1/taxis/history/snapshots` | Time-range taxi count history |
 | 8 | GET | `/api/v1/taxis/history/recent` | Recently online taxi delta |
+| 9 | GET | `/api/v1/zones/{name}/geometry` | GeoJSON geometry of a zone/road/highway |
 
 ---
 

@@ -13,7 +13,10 @@ import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.time.Duration;
+import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 
 @Service
@@ -177,10 +180,19 @@ public class TaxiQueryService {
         OffsetDateTime startTime;
         OffsetDateTime endTime;
         try {
-            startTime = OffsetDateTime.parse(start);
-            endTime = OffsetDateTime.parse(end);
+            ZoneOffset utc = ZoneOffset.ofHours(0);
+            startTime = LocalDateTime.parse(start).atOffset(utc);
+            endTime = LocalDateTime.parse(end).atOffset(utc);
         } catch (Exception e) {
-            return Mono.error(new ValidationException("Invalid start/end datetime format"));
+            return Mono.error(new ValidationException("Invalid datetime format. Expected yyyy-MM-ddTHH:mm:ss, e.g. 2026-03-09T00:00:00"));
+        }
+
+        if (!startTime.isBefore(endTime)) {
+            return Mono.error(new ValidationException("'start' must be before 'end'"));
+        }
+
+        if (Duration.between(startTime, endTime).toDays() > 7) {
+            return Mono.error(new ValidationException("Time range must not exceed 7 days"));
         }
 
         if (zoneName == null) {
@@ -194,7 +206,8 @@ public class TaxiQueryService {
                     .map(entries -> TaxiHistoryResponse.builder().snapshots(entries).build());
         }
 
-        // With zone filter: resolve zone name via fuzzy match, then run the join query
+        // With zone filter: resolve zone name via fuzzy match, then run the join query.
+        // ST_Within automatically uses the GIST index for bounding box pre-filtering in modern PostGIS.
         String sql = """
                 SELECT ts.api_timestamp, COUNT(tp.id) AS zone_taxi_count
                 FROM taxi_snapshots ts

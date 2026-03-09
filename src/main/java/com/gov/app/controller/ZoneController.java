@@ -1,6 +1,8 @@
 package com.gov.app.controller;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.gov.app.domain.Zone;
+import com.gov.app.dto.ZoneGeometryResponse;
 import com.gov.app.dto.ZoneListResponse;
 import com.gov.app.dto.ZoneResolveResponse;
 import com.gov.app.exception.NotFoundException;
@@ -9,11 +11,12 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.http.CacheControl;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Mono;
+
+import java.util.concurrent.TimeUnit;
 
 @Tag(name = "Zones", description = "Available zone catalog for zone-based taxi queries")
 @RestController
@@ -22,6 +25,7 @@ import reactor.core.publisher.Mono;
 public class ZoneController {
 
     private final ZoneRepository zoneRepository;
+    private final ObjectMapper objectMapper;
 
     @Operation(
             summary = "List available zones",
@@ -63,6 +67,41 @@ public class ZoneController {
                 .switchIfEmpty(Mono.error(new NotFoundException(
                         "No match found for '" + name + "'. " +
                         "Check GET /api/v1/zones for all available names.")));
+    }
+
+    @Operation(
+            summary = "Get geometry of a zone",
+            description = "Returns a GeoJSON Feature with the boundary or path of a zone. " +
+                    "Districts return a Polygon; roads and highways return a LineString. " +
+                    "Fuzzy-matches the name so 'Tampines' and 'tampines' both work. " +
+                    "This data is static — clients should cache it aggressively."
+    )
+    @GetMapping("/{name}/geometry")
+    public Mono<ResponseEntity<ZoneGeometryResponse>> getGeometry(
+            @Parameter(description = "Zone name, e.g. 'tampines', 'aye', 'orchard-road'", example = "tampines")
+            @PathVariable String name) {
+
+        return zoneRepository.findBestAnyMatch(name, 0.3)
+                .switchIfEmpty(Mono.error(new NotFoundException(
+                        "No zone found matching '" + name + "'. Check GET /api/v1/zones for all available names.")))
+                .flatMap(zone -> zoneRepository.findGeometryByName(zone.getName()))
+                .map(raw -> {
+                    try {
+                        var geometry = objectMapper.readTree(raw.geometryJson());
+                        var response = ZoneGeometryResponse.builder()
+                                .properties(ZoneGeometryResponse.Properties.builder()
+                                        .name(raw.name())
+                                        .category(raw.category())
+                                        .build())
+                                .geometry(geometry)
+                                .build();
+                        return ResponseEntity.ok()
+                                .cacheControl(CacheControl.maxAge(1, TimeUnit.DAYS))
+                                .<ZoneGeometryResponse>body(response);
+                    } catch (Exception e) {
+                        throw new RuntimeException("Failed to parse zone geometry", e);
+                    }
+                });
     }
 
     private String suggestedEndpoint(Zone zone) {

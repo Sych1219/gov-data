@@ -184,15 +184,17 @@ public class TaxiController {
                description = "Returns aggregated taxi count snapshots between `start` and `end`, optionally filtered by zone.")
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "Success"),
-        @ApiResponse(responseCode = "400", description = "Invalid time range",
+        @ApiResponse(responseCode = "400", description = "Invalid time range or range exceeds 7 days",
+            content = @Content(schema = @Schema(ref = "#/components/schemas/ErrorResponse"))),
+        @ApiResponse(responseCode = "404", description = "Zone not found",
             content = @Content(schema = @Schema(ref = "#/components/schemas/ErrorResponse")))
     })
     @GetMapping("/history/snapshots")
     public Mono<TaxiHistoryResponse> historySnapshots(
-            @Parameter(description = "Start of range, ISO-8601 SGT", example = "2025-01-15T00:00:00+08:00", required = true)
+            @Parameter(description = "Start of range, SGT (yyyy-MM-ddTHH:mm:ss)", example = "2026-03-09T00:00:00", required = true)
             @RequestParam String start,
 
-            @Parameter(description = "End of range, ISO-8601 SGT", example = "2025-01-15T08:00:00+08:00", required = true)
+            @Parameter(description = "End of range, SGT (yyyy-MM-ddTHH:mm:ss)", example = "2026-03-09T08:00:00", required = true)
             @RequestParam String end,
 
             @Parameter(description = "Optional zone filter, e.g. 'CBD'")
