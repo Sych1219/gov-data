@@ -14,9 +14,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.time.Duration;
-import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import java.util.List;
 
 @Service
@@ -180,11 +178,10 @@ public class TaxiQueryService {
         OffsetDateTime startTime;
         OffsetDateTime endTime;
         try {
-            ZoneOffset utc = ZoneOffset.ofHours(0);
-            startTime = LocalDateTime.parse(start).atOffset(utc);
-            endTime = LocalDateTime.parse(end).atOffset(utc);
+            startTime = OffsetDateTime.parse(start.replace(" ", "+"));
+            endTime = OffsetDateTime.parse(end.replace(" ", "+"));
         } catch (Exception e) {
-            return Mono.error(new ValidationException("Invalid datetime format. Expected yyyy-MM-ddTHH:mm:ss, e.g. 2026-03-09T00:00:00"));
+            return Mono.error(new ValidationException("Invalid datetime format. Expected ISO-8601 SGT, e.g. 2026-03-09T00:00:00+08:00"));
         }
 
         if (!startTime.isBefore(endTime)) {
