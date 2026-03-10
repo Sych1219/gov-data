@@ -1,5 +1,6 @@
 package com.gov.app.dto;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Builder;
 import lombok.Value;
@@ -11,8 +12,9 @@ import java.util.List;
 @Builder
 public class TaxiTimelineResponse {
 
+    @JsonInclude(JsonInclude.Include.NON_NULL)
     @JsonProperty("window_minutes")
-    int windowMinutes;
+    Integer windowMinutes;
 
     @JsonProperty("from_time")
     OffsetDateTime fromTime;

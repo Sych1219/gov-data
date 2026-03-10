@@ -426,9 +426,9 @@ GET /api/v1/taxis/history/snapshots
 | `end` | string | ✅ | End time (SGT) |
 | `zone` | string | ❌ | Filter to a named zone |
 
-Returns per-snapshot taxi counts within the time window.
+Returns per-snapshot taxi positions within the time window. Same structure as **4.8** — designed for Mapbox timeline visualisation.
 
-**Core SQL**:
+**Core SQL** (no zone):
 ```sql
 SELECT ts.api_timestamp, ts.taxi_count
 FROM taxi_snapshots ts
@@ -448,7 +448,38 @@ GROUP BY ts.api_timestamp
 ORDER BY ts.api_timestamp;
 ```
 
-**Example**: `GET /api/v1/taxis/history/snapshots?start=2026-02-28T08:00:00&end=2026-02-28T09:00:00&zone=cbd`
+**Example**: `GET /api/v1/taxis/history/snapshots?start=2026-02-28T08:00:00+08:00&end=2026-02-28T09:00:00+08:00&zone=cbd`
+
+**Response**:
+```json
+{
+  "from_time": "2026-02-28T08:00:00+08:00",
+  "to_time": "2026-02-28T09:00:00+08:00",
+  "snapshots": [
+    {
+      "timestamp": "2026-02-28T08:00:00+08:00",
+      "taxi_count": 3200,
+      "locations": {
+        "type": "FeatureCollection",
+        "features": [
+          { "type": "Feature", "geometry": { "type": "Point", "coordinates": [103.832, 1.304] }, "properties": null },
+          { "type": "Feature", "geometry": { "type": "Point", "coordinates": [103.851, 1.290] }, "properties": null }
+        ]
+      }
+    },
+    {
+      "timestamp": "2026-02-28T08:01:00+08:00",
+      "taxi_count": 3215,
+      "locations": {
+        "type": "FeatureCollection",
+        "features": [
+          { "type": "Feature", "geometry": { "type": "Point", "coordinates": [103.833, 1.305] }, "properties": null }
+        ]
+      }
+    }
+  ]
+}
+```
 
 ---
 

@@ -180,7 +180,7 @@ public class TaxiController {
 
     /** 4.7 Historical snapshots in a time range */
     @Operation(summary = "Historical snapshots in a time range",
-               description = "Returns aggregated taxi count snapshots between `start` and `end`, optionally filtered by zone.")
+               description = "Returns per-snapshot taxi positions between `start` and `end`, optionally filtered by zone. Designed for Mapbox timeline visualisation.")
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "Success"),
         @ApiResponse(responseCode = "400", description = "Invalid time range or range exceeds 7 days",
@@ -189,7 +189,7 @@ public class TaxiController {
             content = @Content(schema = @Schema(ref = "#/components/schemas/ErrorResponse")))
     })
     @GetMapping("/history/snapshots")
-    public Mono<TaxiHistoryResponse> historySnapshots(
+    public Mono<TaxiTimelineResponse> historySnapshots(
             @Parameter(description = "Start of range, ISO-8601 SGT", example = "2026-03-09T00:00:00+08:00", required = true)
             @RequestParam String start,
 

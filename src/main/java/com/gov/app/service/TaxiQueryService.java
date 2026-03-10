@@ -8,7 +8,6 @@ import com.gov.app.repository.TaxiPositionRepository;
 import com.gov.app.repository.TaxiSnapshotRepository;
 import com.gov.app.repository.ZoneRepository;
 import lombok.RequiredArgsConstructor;
-import org.springframework.r2dbc.core.DatabaseClient;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -24,7 +23,6 @@ public class TaxiQueryService {
     private final TaxiSnapshotRepository snapshotRepository;
     private final TaxiPositionRepository positionRepository;
     private final ZoneRepository zoneRepository;
-    private final DatabaseClient db;
 
     // ── Snapshot resolution ────────────────────────────────────────────────────
 
@@ -174,7 +172,7 @@ public class TaxiQueryService {
 
     // ── History snapshots ──────────────────────────────────────────────────────
 
-    public Mono<TaxiHistoryResponse> getHistory(String start, String end, String zoneName) {
+    public Mono<TaxiTimelineResponse> getHistory(String start, String end, String zoneName) {
         OffsetDateTime startTime;
         OffsetDateTime endTime;
         try {
@@ -193,28 +191,8 @@ public class TaxiQueryService {
         }
 
         if (zoneName == null) {
-            return snapshotRepository
-                    .findByApiTimestampBetweenOrderByApiTimestampAsc(startTime, endTime)
-                    .map(s -> TaxiHistoryResponse.SnapshotEntry.builder()
-                            .apiTimestamp(s.getApiTimestamp())
-                            .taxiCount(s.getTaxiCount())
-                            .build())
-                    .collectList()
-                    .map(entries -> TaxiHistoryResponse.builder().snapshots(entries).build());
+            return buildTimeline(startTime, endTime, null);
         }
-
-        // With zone filter: resolve zone name via fuzzy match, then run the join query.
-        // ST_Within automatically uses the GIST index for bounding box pre-filtering in modern PostGIS.
-        String sql = """
-                SELECT ts.api_timestamp, COUNT(tp.id) AS zone_taxi_count
-                FROM taxi_snapshots ts
-                JOIN taxi_positions tp ON tp.snapshot_id = ts.id
-                JOIN zones z ON z.name = :zoneName
-                WHERE ts.api_timestamp BETWEEN :start AND :end
-                  AND ST_Within(tp.geog::geometry, z.geog::geometry)
-                GROUP BY ts.api_timestamp
-                ORDER BY ts.api_timestamp
-                """;
 
         return zoneRepository.findBestDistrictMatch(zoneName, 0.3)
                 .switchIfEmpty(
@@ -225,17 +203,31 @@ public class TaxiQueryService {
                                         "Did you mean: " + suggestions + "? " +
                                         "Check GET /api/v1/zones for all available zone names.")))
                 )
-                .flatMap(resolvedName -> db.sql(sql)
-                .bind("zoneName", resolvedName)
-                .bind("start", startTime)
-                .bind("end", endTime)
-                .map(row -> TaxiHistoryResponse.SnapshotEntry.builder()
-                        .apiTimestamp(row.get("api_timestamp", OffsetDateTime.class))
-                        .taxiCount(row.get("zone_taxi_count", Long.class).intValue())
-                        .build())
-                .all()
+                .flatMap(resolvedName -> buildTimeline(startTime, endTime, resolvedName));
+    }
+
+    private Mono<TaxiTimelineResponse> buildTimeline(OffsetDateTime from, OffsetDateTime to, String zoneName) {
+        return snapshotRepository.findByApiTimestampBetweenOrderByApiTimestampAsc(from, to)
+                .flatMapSequential(snapshot -> {
+                    Mono<Long> countMono = zoneName == null
+                            ? Mono.just((long) snapshot.getTaxiCount())
+                            : positionRepository.countInZone(snapshot.getId(), zoneName);
+                    Flux<double[]> coordsFlux = zoneName == null
+                            ? positionRepository.listForSnapshot(snapshot.getId())
+                            : positionRepository.listInZone(snapshot.getId(), zoneName);
+                    return Mono.zip(countMono, toFeatureList(coordsFlux),
+                            (count, features) -> TaxiTimelineResponse.SnapshotEntry.builder()
+                                    .timestamp(snapshot.getApiTimestamp())
+                                    .taxiCount(count.intValue())
+                                    .locations(GeoJsonFeatureCollection.builder().features(features).build())
+                                    .build());
+                })
                 .collectList()
-                .map(entries -> TaxiHistoryResponse.builder().snapshots(entries).build()));
+                .map(entries -> TaxiTimelineResponse.builder()
+                        .fromTime(entries.isEmpty() ? from : entries.get(0).getTimestamp())
+                        .toTime(entries.isEmpty() ? to : entries.get(entries.size() - 1).getTimestamp())
+                        .snapshots(entries)
+                        .build());
     }
 
     // ── Shared helpers ─────────────────────────────────────────────────────────
