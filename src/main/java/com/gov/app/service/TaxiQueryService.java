@@ -249,21 +249,26 @@ public class TaxiQueryService {
                 .collectList();
     }
 
-    // ── Recent activity ────────────────────────────────────────────────────────
+    // ── Recent activity (timeline) ─────────────────────────────────────────────
 
-    public Mono<Long> getRecentDelta(int minutes) {
-        String sql = """
-                SELECT MAX(taxi_count) - MIN(taxi_count) AS delta
-                FROM taxi_snapshots
-                WHERE fetched_at >= NOW() - INTERVAL ':minutes minutes'
-                """.replace(":minutes", String.valueOf(minutes));
+    public Mono<TaxiTimelineResponse> getRecentTimeline(int minutes) {
+        OffsetDateTime to = OffsetDateTime.now();
+        OffsetDateTime from = to.minusMinutes(minutes);
 
-        return db.sql(sql)
-                .map(row -> {
-                    Long delta = row.get("delta", Long.class);
-                    return delta != null ? delta : 0L;
-                })
-                .one()
-                .defaultIfEmpty(0L);
+        return snapshotRepository.findByApiTimestampBetweenOrderByApiTimestampAsc(from, to)
+                .flatMapSequential(snapshot ->
+                        toFeatureList(positionRepository.listForSnapshot(snapshot.getId()))
+                                .map(features -> TaxiTimelineResponse.SnapshotEntry.builder()
+                                        .timestamp(snapshot.getApiTimestamp())
+                                        .taxiCount(snapshot.getTaxiCount())
+                                        .locations(GeoJsonFeatureCollection.builder().features(features).build())
+                                        .build()))
+                .collectList()
+                .map(entries -> TaxiTimelineResponse.builder()
+                        .windowMinutes(minutes)
+                        .fromTime(entries.isEmpty() ? from : entries.get(0).getTimestamp())
+                        .toTime(entries.isEmpty() ? to : entries.get(entries.size() - 1).getTimestamp())
+                        .snapshots(entries)
+                        .build());
     }
 }

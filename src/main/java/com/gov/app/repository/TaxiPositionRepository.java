@@ -244,6 +244,22 @@ public class TaxiPositionRepository {
                 .all();
     }
 
+    /** List all taxi positions for a given snapshot. Returns rows with longitude and latitude. */
+    public Flux<double[]> listForSnapshot(long snapshotId) {
+        String sql = """
+                SELECT longitude, latitude
+                FROM taxi_positions
+                WHERE snapshot_id = :snapshotId
+                """;
+        return db.sql(sql)
+                .bind("snapshotId", snapshotId)
+                .map(row -> new double[]{
+                        row.get("longitude", Double.class),
+                        row.get("latitude", Double.class)
+                })
+                .all();
+    }
+
     /** List taxis within buffer metres of a custom GeoJSON LineString route. Returns rows with longitude and latitude. */
     public Flux<double[]> listAlongRoute(long snapshotId, String routeGeoJson, int bufferM) {
         String sql = """

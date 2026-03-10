@@ -21,7 +21,6 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Mono;
 
-import java.util.Map;
 
 
 @Slf4j
@@ -203,16 +202,15 @@ public class TaxiController {
         return queryService.getHistory(start, end, zone);
     }
 
-    /** 4.8 Recent activity delta (taxi count change in last N minutes) */
-    @Operation(summary = "Recent taxi count delta",
-               description = "Returns the change in available taxi count over the last N minutes.")
+    /** 4.8 Recent activity — per-snapshot positions for Mapbox timeline */
+    @Operation(summary = "Recent activity timeline",
+               description = "Returns per-snapshot taxi positions across the last N minutes. Designed for Mapbox timeline visualisation.")
     @ApiResponse(responseCode = "200", description = "Success")
     @GetMapping("/history/recent")
-    public Mono<Map<String, Object>> recentActivity(
+    public Mono<TaxiTimelineResponse> recentActivity(
             @Parameter(description = "Look-back window in minutes", example = "15")
             @RequestParam(defaultValue = "15") int minutes) {
         log.info("GET /history/recent - minutes={}", minutes);
-        return queryService.getRecentDelta(minutes)
-                .map(delta -> Map.of("delta", delta, "minutes", minutes));
+        return queryService.getRecentTimeline(minutes);
     }
 }

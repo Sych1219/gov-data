@@ -462,7 +462,50 @@ GET /api/v1/taxis/history/recent
 |-------|------|----------|-------------|
 | `minutes` | integer | ❌ | Lookback window, default `15` |
 
-Returns total new taxis that appeared in the last N minutes (count difference between oldest and newest snapshot in window).
+Returns per-snapshot taxi positions across the lookback window. Designed for Mapbox timeline visualisation — the client loads the response once, then swaps `locations` on each slider tick.
+
+**Response**:
+```json
+{
+  "window_minutes": 15,
+  "from_time": "2026-02-28T08:00:00+08:00",
+  "to_time": "2026-02-28T08:15:00+08:00",
+  "snapshots": [
+    {
+      "timestamp": "2026-02-28T08:00:00+08:00",
+      "taxi_count": 3200,
+      "locations": {
+        "type": "FeatureCollection",
+        "features": [
+          { "type": "Feature", "geometry": { "type": "Point", "coordinates": [103.832, 1.304] }, "properties": null },
+          { "type": "Feature", "geometry": { "type": "Point", "coordinates": [103.851, 1.290] }, "properties": null }
+        ]
+      }
+    },
+    {
+      "timestamp": "2026-02-28T08:01:00+08:00",
+      "taxi_count": 3230,
+      "locations": {
+        "type": "FeatureCollection",
+        "features": [
+          { "type": "Feature", "geometry": { "type": "Point", "coordinates": [103.833, 1.305] }, "properties": null }
+        ]
+      }
+    }
+  ]
+}
+```
+
+**Frontend usage (Mapbox)**:
+```js
+// Load once
+map.addSource('taxis', { type: 'geojson', data: response.snapshots[0].locations });
+
+// On timeline slide
+const snap = response.snapshots[sliderIndex];
+map.getSource('taxis').setData(snap.locations);
+countLabel.text = snap.taxi_count;
+```
 
 ---
 
@@ -563,6 +606,7 @@ com.gov.app
 │   ├── TaxiPolygonRequest.java
 │   ├── TaxiRouteRequest.java
 │   ├── TaxiHistoryResponse.java
+│   ├── TaxiTimelineResponse.java
 │   └── upstream
 │       └── GovTaxiResponse.java      # Maps data.gov.sg GeoJSON response
 │
