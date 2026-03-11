@@ -5,15 +5,11 @@ import lombok.Value;
 
 import java.util.List;
 
-/**
- * Minimal GeoJSON FeatureCollection used as the {@code locations} field in count responses.
- * Reuses the Feature/Geometry inner types from {@link TaxiNearbyListResponse}.
- */
 @Value
 @Builder
 public class GeoJsonFeatureCollection {
 
     String type = "FeatureCollection";
 
-    List<TaxiNearbyListResponse.Feature> features;
+    List<GeoJsonFeature> features;
 }

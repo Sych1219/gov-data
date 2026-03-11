@@ -2,9 +2,10 @@ package com.gov.app.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.gov.app.domain.Zone;
-import com.gov.app.dto.ZoneGeometryResponse;
 import com.gov.app.dto.ZoneListResponse;
 import com.gov.app.dto.ZoneResolveResponse;
+import com.gov.app.dto.response.ApiResponse;
+import com.gov.app.dto.response.ZoneGeometryData;
 import com.gov.app.exception.NotFoundException;
 import com.gov.app.repository.ZoneRepository;
 import io.swagger.v3.oas.annotations.Operation;
@@ -33,7 +34,7 @@ public class ZoneController {
                     + "Filter by `?category=district`, `?category=road`, or `?category=highway`."
     )
     @GetMapping
-    public Mono<ZoneListResponse> listZones(
+    public Mono<ApiResponse<ZoneListResponse>> listZones(
             @Parameter(description = "Optional category filter: district, road, or highway")
             @RequestParam(required = false) String category) {
 
@@ -44,17 +45,17 @@ public class ZoneController {
         return zones
                 .map(z -> new ZoneListResponse.ZoneEntry(z.getName(), z.getCategory()))
                 .collectList()
-                .map(ZoneListResponse::new);
+                .map(ZoneListResponse::new)
+                .map(ApiResponse::ok);
     }
 
     @Operation(
             summary = "Resolve a place name to its category and suggested endpoint",
             description = "Fuzzy-matches a name across all categories (district, road, highway) and returns " +
-                    "the canonical name, its category, and the recommended API endpoint to call. " +
-                    "Use this before calling a taxi query endpoint when you are unsure whether a name refers to a district or a road."
+                    "the canonical name, its category, and the recommended API endpoint to call."
     )
     @GetMapping("/resolve")
-    public Mono<ZoneResolveResponse> resolve(
+    public Mono<ApiResponse<ZoneResolveResponse>> resolve(
             @Parameter(description = "Place name to resolve, e.g. 'AYE', 'CBD', 'Orchard Road'", example = "AYE")
             @RequestParam String name) {
 
@@ -66,18 +67,18 @@ public class ZoneController {
                         .build())
                 .switchIfEmpty(Mono.error(new NotFoundException(
                         "No match found for '" + name + "'. " +
-                        "Check GET /api/v1/zones for all available names.")));
+                        "Check GET /api/v1/zones for all available names.")))
+                .map(ApiResponse::ok);
     }
 
     @Operation(
             summary = "Get geometry of a zone",
-            description = "Returns a GeoJSON Feature with the boundary or path of a zone. " +
+            description = "Returns the boundary or path of a zone. " +
                     "Districts return a Polygon; roads and highways return a LineString. " +
-                    "Fuzzy-matches the name so 'Tampines' and 'tampines' both work. " +
                     "This data is static — clients should cache it aggressively."
     )
     @GetMapping("/{name}/geometry")
-    public Mono<ResponseEntity<ZoneGeometryResponse>> getGeometry(
+    public Mono<ResponseEntity<ApiResponse<ZoneGeometryData>>> getGeometry(
             @Parameter(description = "Zone name, e.g. 'tampines', 'aye', 'orchard-road'", example = "tampines")
             @PathVariable String name) {
 
@@ -88,16 +89,14 @@ public class ZoneController {
                 .map(raw -> {
                     try {
                         var geometry = objectMapper.readTree(raw.geometryJson());
-                        var response = ZoneGeometryResponse.builder()
-                                .properties(ZoneGeometryResponse.Properties.builder()
-                                        .name(raw.name())
-                                        .category(raw.category())
-                                        .build())
+                        var data = ZoneGeometryData.builder()
+                                .name(raw.name())
+                                .category(raw.category())
                                 .geometry(geometry)
                                 .build();
                         return ResponseEntity.ok()
                                 .cacheControl(CacheControl.maxAge(1, TimeUnit.DAYS))
-                                .<ZoneGeometryResponse>body(response);
+                                .<ApiResponse<ZoneGeometryData>>body(ApiResponse.ok(data));
                     } catch (Exception e) {
                         throw new RuntimeException("Failed to parse zone geometry", e);
                     }

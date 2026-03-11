@@ -1,5 +1,7 @@
 package com.gov.app.exception;
 
+import com.gov.app.dto.response.ApiError;
+import com.gov.app.dto.response.ApiResponse;
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -16,68 +18,59 @@ import java.util.Map;
 public class GlobalExceptionHandler {
 
     @ExceptionHandler(NotFoundException.class)
-    public ResponseEntity<Map<String, Object>> handleNotFound(NotFoundException ex) {
-        return buildResponse(HttpStatus.NOT_FOUND, ex.getMessage());
+    public ResponseEntity<ApiResponse<Void>> handleNotFound(NotFoundException ex) {
+        return error(HttpStatus.NOT_FOUND, "NOT_FOUND", ex.getMessage(), null);
     }
 
     @ExceptionHandler(ValidationException.class)
-    public ResponseEntity<Map<String, Object>> handleValidation(ValidationException ex) {
-        Map<String, Object> body = buildBody(HttpStatus.BAD_REQUEST, ex.getMessage());
-        if (ex.getValidationErrors() != null && !ex.getValidationErrors().isEmpty()) {
-            body.put("errors", ex.getValidationErrors());
-        }
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
+    public ResponseEntity<ApiResponse<Void>> handleValidation(ValidationException ex) {
+        Object details = (ex.getValidationErrors() != null && !ex.getValidationErrors().isEmpty())
+                ? ex.getValidationErrors() : null;
+        return error(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", ex.getMessage(), details);
     }
 
     @ExceptionHandler(ConstraintViolationException.class)
-    public ResponseEntity<Map<String, Object>> handleConstraintViolation(ConstraintViolationException ex) {
-        Map<String, Object> body = buildBody(HttpStatus.BAD_REQUEST, "Validation failed");
+    public ResponseEntity<ApiResponse<Void>> handleConstraintViolation(ConstraintViolationException ex) {
         Map<String, String> errors = new HashMap<>();
         ex.getConstraintViolations().forEach(v -> {
             String path = v.getPropertyPath().toString();
             String field = path.contains(".") ? path.substring(path.lastIndexOf('.') + 1) : path;
             errors.put(field, v.getMessage());
         });
-        body.put("errors", errors);
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
+        return error(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "Validation failed", errors);
     }
 
     @ExceptionHandler(WebExchangeBindException.class)
-    public ResponseEntity<Map<String, Object>> handleWebExchangeBind(WebExchangeBindException ex) {
-        Map<String, Object> body = buildBody(HttpStatus.BAD_REQUEST, "Validation failed");
+    public ResponseEntity<ApiResponse<Void>> handleWebExchangeBind(WebExchangeBindException ex) {
         Map<String, String> errors = new HashMap<>();
         ex.getBindingResult().getFieldErrors()
                 .forEach(e -> errors.put(e.getField(), e.getDefaultMessage()));
-        body.put("errors", errors);
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
+        return error(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "Validation failed", errors);
     }
 
     @ExceptionHandler(BusinessException.class)
-    public ResponseEntity<Map<String, Object>> handleBusiness(BusinessException ex) {
-        return buildResponse(HttpStatus.BAD_REQUEST, ex.getMessage());
+    public ResponseEntity<ApiResponse<Void>> handleBusiness(BusinessException ex) {
+        return error(HttpStatus.BAD_REQUEST, "BAD_REQUEST", ex.getMessage(), null);
     }
 
     @ExceptionHandler(UpstreamException.class)
-    public ResponseEntity<Map<String, Object>> handleUpstream(UpstreamException ex) {
+    public ResponseEntity<ApiResponse<Void>> handleUpstream(UpstreamException ex) {
         log.error("Upstream error ({}): {}", ex.getStatusCode(), ex.getMessage());
-        return buildResponse(HttpStatus.BAD_GATEWAY, ex.getMessage());
+        return error(HttpStatus.BAD_GATEWAY, "UPSTREAM_ERROR", ex.getMessage(), null);
     }
 
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<Map<String, Object>> handleGeneric(Exception ex) {
+    public ResponseEntity<ApiResponse<Void>> handleGeneric(Exception ex) {
         log.error("Unhandled exception", ex);
-        return buildResponse(HttpStatus.INTERNAL_SERVER_ERROR, "An unexpected error occurred");
+        return error(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_ERROR", "An unexpected error occurred", null);
     }
 
-    private ResponseEntity<Map<String, Object>> buildResponse(HttpStatus status, String message) {
-        return ResponseEntity.status(status).body(buildBody(status, message));
-    }
-
-    private Map<String, Object> buildBody(HttpStatus status, String message) {
-        Map<String, Object> body = new HashMap<>();
-        body.put("status", status.value());
-        body.put("error", status.getReasonPhrase());
-        body.put("message", message);
-        return body;
+    private ResponseEntity<ApiResponse<Void>> error(HttpStatus status, String code, String message, Object details) {
+        return ResponseEntity.status(status).body(
+                ApiResponse.fail(ApiError.builder()
+                        .code(code)
+                        .message(message)
+                        .details(details)
+                        .build()));
     }
 }

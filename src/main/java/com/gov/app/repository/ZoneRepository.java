@@ -110,6 +110,27 @@ public class ZoneRepository {
                 .one();
     }
 
+    /**
+     * Returns the best-matching road/highway Zone (with name and category) whose
+     * trigram similarity exceeds {@code threshold}. Used to populate RoadContext.
+     */
+    public Mono<Zone> findBestRoadZone(String input, double threshold) {
+        return db.sql("""
+                SELECT name, category FROM zones
+                WHERE category IN ('road', 'highway')
+                  AND similarity(name, :q) > :threshold
+                ORDER BY similarity(name, :q) DESC
+                LIMIT 1
+                """)
+                .bind("q", input)
+                .bind("threshold", threshold)
+                .map(row -> Zone.builder()
+                        .name(row.get("name", String.class))
+                        .category(row.get("category", String.class))
+                        .build())
+                .one();
+    }
+
     /** Returns the top {@code limit} road/highway names closest to {@code input} by trigram similarity. */
     public Flux<String> findRoadSuggestions(String input, int limit) {
         return db.sql("""
