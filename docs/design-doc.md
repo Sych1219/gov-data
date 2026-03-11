@@ -137,10 +137,40 @@ CREATE INDEX idx_zones_name     ON zones (name);
 
 ## 4. API Endpoint Design
 
-All endpoints accept an optional `datetime` query parameter (`YYYY-MM-DDTHH:mm:ss` SGT).  
+All endpoints accept an optional `datetime` query parameter (`YYYY-MM-DDTHH:mm:ss` SGT).
 When omitted, the **latest** available snapshot is used.
 
 Base path: `/api/v1/taxis`
+
+---
+
+### 4.0 Unified Response Structure
+
+All endpoints return the same outer envelope:
+
+```json
+{ "success": true,  "data": { ... }, "error": null }
+{ "success": false, "data": null,    "error": { "code": "NOT_FOUND", "message": "...", "details": {} } }
+```
+
+The `data` field is a **tagged union** — a `type` discriminator field determines the shape:
+
+| `data.type` | Used by |
+|---|---|
+| `spatial_query` | `/nearby`, `/nearest`, `/zone/*/count`, `/polygon/count`, `/road/*/count`, `/route/count` |
+| `timeline` | `/history/snapshots`, `/history/recent` |
+| `zone_geometry` | `/zones/*/geometry` |
+
+Within `spatial_query`, a nested `context` object captures the query parameters, also discriminated by `context.type`:
+
+| `context.type` | Endpoint |
+|---|---|
+| `radius` | `/nearby` |
+| `nearest` | `/nearest` |
+| `zone` | `/zone/*/count` |
+| `polygon` | `/polygon/count` |
+| `road` | `/road/*/count` |
+| `route` | `/route/count` |
 
 ---
 
@@ -177,16 +207,21 @@ WHERE ts.id = :snapshotId
 **Response**:
 ```json
 {
-  "taxi_count": 42,
-  "snapshot_time": "2026-02-28T08:00:00+08:00",
-  "query": { "lat": 1.3644, "lon": 103.9915, "radius_m": 3000 },
-  "locations": {
-    "type": "FeatureCollection",
-    "features": [
-      { "type": "Feature", "geometry": { "type": "Point", "coordinates": [103.992, 1.361] }, "properties": null },
-      { "type": "Feature", "geometry": { "type": "Point", "coordinates": [103.987, 1.365] }, "properties": null }
-    ]
-  }
+  "success": true,
+  "data": {
+    "type": "spatial_query",
+    "taxi_count": 42,
+    "snapshot_time": "2026-02-28T08:00:00+08:00",
+    "context": { "type": "radius", "lat": 1.3644, "lon": 103.9915, "radius_m": 3000 },
+    "locations": {
+      "type": "FeatureCollection",
+      "features": [
+        { "type": "Feature", "geometry": { "type": "Point", "coordinates": [103.992, 1.361] }, "properties": null },
+        { "type": "Feature", "geometry": { "type": "Point", "coordinates": [103.987, 1.365] }, "properties": null }
+      ]
+    }
+  },
+  "error": null
 }
 ```
 
@@ -221,16 +256,21 @@ LIMIT :limit;
 **Response**:
 ```json
 {
-  "taxi_count": 2,
-  "snapshot_time": "2026-02-28T08:00:00+08:00",
-  "query": { "lat": 1.3521, "lon": 103.8198, "limit": 5 },
-  "locations": {
-    "type": "FeatureCollection",
-    "features": [
-      { "type": "Feature", "geometry": { "type": "Point", "coordinates": [103.820, 1.352] }, "properties": { "distance_m": 123.4 } },
-      { "type": "Feature", "geometry": { "type": "Point", "coordinates": [103.821, 1.353] }, "properties": { "distance_m": 201.0 } }
-    ]
-  }
+  "success": true,
+  "data": {
+    "type": "spatial_query",
+    "taxi_count": 2,
+    "snapshot_time": "2026-02-28T08:00:00+08:00",
+    "context": { "type": "nearest", "lat": 1.3521, "lon": 103.8198, "limit": 5 },
+    "locations": {
+      "type": "FeatureCollection",
+      "features": [
+        { "type": "Feature", "geometry": { "type": "Point", "coordinates": [103.820, 1.352] }, "properties": { "distance_m": 123.4 } },
+        { "type": "Feature", "geometry": { "type": "Point", "coordinates": [103.821, 1.353] }, "properties": { "distance_m": 201.0 } }
+      ]
+    }
+  },
+  "error": null
 }
 ```
 
@@ -264,16 +304,21 @@ WHERE tp.snapshot_id = :snapshotId
 **Response**:
 ```json
 {
-  "zone": "tampines",
-  "taxi_count": 187,
-  "snapshot_time": "2026-02-28T08:00:00+08:00",
-  "locations": {
-    "type": "FeatureCollection",
-    "features": [
-      { "type": "Feature", "geometry": { "type": "Point", "coordinates": [103.820, 1.352] }, "properties": null },
-      { "type": "Feature", "geometry": { "type": "Point", "coordinates": [103.821, 1.353] }, "properties": null }
-    ]
-  }
+  "success": true,
+  "data": {
+    "type": "spatial_query",
+    "taxi_count": 187,
+    "snapshot_time": "2026-02-28T08:00:00+08:00",
+    "context": { "type": "zone", "zone_name": "tampines", "category": "district" },
+    "locations": {
+      "type": "FeatureCollection",
+      "features": [
+        { "type": "Feature", "geometry": { "type": "Point", "coordinates": [103.820, 1.352] }, "properties": null },
+        { "type": "Feature", "geometry": { "type": "Point", "coordinates": [103.821, 1.353] }, "properties": null }
+      ]
+    }
+  },
+  "error": null
 }
 ```
 
@@ -307,14 +352,26 @@ WHERE tp.snapshot_id = :snapshotId
 **Response**:
 ```json
 {
-  "taxi_count": 23,
-  "snapshot_time": "2026-02-28T08:00:00+08:00",
-  "locations": {
-    "type": "FeatureCollection",
-    "features": [
-      { "type": "Feature", "geometry": { "type": "Point", "coordinates": [103.830, 1.290] }, "properties": null }
-    ]
-  }
+  "success": true,
+  "data": {
+    "type": "spatial_query",
+    "taxi_count": 23,
+    "snapshot_time": "2026-02-28T08:00:00+08:00",
+    "context": {
+      "type": "polygon",
+      "polygon": {
+        "type": "Polygon",
+        "coordinates": [[[103.81, 1.28], [103.85, 1.28], [103.85, 1.32], [103.81, 1.32], [103.81, 1.28]]]
+      }
+    },
+    "locations": {
+      "type": "FeatureCollection",
+      "features": [
+        { "type": "Feature", "geometry": { "type": "Point", "coordinates": [103.830, 1.290] }, "properties": null }
+      ]
+    }
+  },
+  "error": null
 }
 ```
 
@@ -353,15 +410,20 @@ WHERE tp.snapshot_id = :snapshotId
 **Response**:
 ```json
 {
-  "road": "orchard-road",
-  "taxi_count": 15,
-  "snapshot_time": "2026-02-28T08:00:00+08:00",
-  "locations": {
-    "type": "FeatureCollection",
-    "features": [
-      { "type": "Feature", "geometry": { "type": "Point", "coordinates": [103.832, 1.304] }, "properties": null }
-    ]
-  }
+  "success": true,
+  "data": {
+    "type": "spatial_query",
+    "taxi_count": 15,
+    "snapshot_time": "2026-02-28T08:00:00+08:00",
+    "context": { "type": "road", "road_name": "orchard-road", "category": "highway", "buffer_m": 150 },
+    "locations": {
+      "type": "FeatureCollection",
+      "features": [
+        { "type": "Feature", "geometry": { "type": "Point", "coordinates": [103.832, 1.304] }, "properties": null }
+      ]
+    }
+  },
+  "error": null
 }
 ```
 
@@ -400,15 +462,27 @@ WHERE tp.snapshot_id = :snapshotId
 **Response**:
 ```json
 {
-  "taxi_count": 28,
-  "buffer_m": 200,
-  "snapshot_time": "2026-02-28T08:00:00+08:00",
-  "locations": {
-    "type": "FeatureCollection",
-    "features": [
-      { "type": "Feature", "geometry": { "type": "Point", "coordinates": [103.851, 1.290] }, "properties": null }
-    ]
-  }
+  "success": true,
+  "data": {
+    "type": "spatial_query",
+    "taxi_count": 28,
+    "snapshot_time": "2026-02-28T08:00:00+08:00",
+    "context": {
+      "type": "route",
+      "route": {
+        "type": "LineString",
+        "coordinates": [[103.989, 1.364], [103.851, 1.290], [103.833, 1.280]]
+      },
+      "buffer_m": 200
+    },
+    "locations": {
+      "type": "FeatureCollection",
+      "features": [
+        { "type": "Feature", "geometry": { "type": "Point", "coordinates": [103.851, 1.290] }, "properties": null }
+      ]
+    }
+  },
+  "error": null
 }
 ```
 
@@ -453,31 +527,36 @@ ORDER BY ts.api_timestamp;
 **Response**:
 ```json
 {
-  "from_time": "2026-02-28T08:00:00+08:00",
-  "to_time": "2026-02-28T09:00:00+08:00",
-  "snapshots": [
-    {
-      "timestamp": "2026-02-28T08:00:00+08:00",
-      "taxi_count": 3200,
-      "locations": {
-        "type": "FeatureCollection",
-        "features": [
-          { "type": "Feature", "geometry": { "type": "Point", "coordinates": [103.832, 1.304] }, "properties": null },
-          { "type": "Feature", "geometry": { "type": "Point", "coordinates": [103.851, 1.290] }, "properties": null }
-        ]
+  "success": true,
+  "data": {
+    "type": "timeline",
+    "from_time": "2026-02-28T08:00:00+08:00",
+    "to_time": "2026-02-28T09:00:00+08:00",
+    "snapshots": [
+      {
+        "timestamp": "2026-02-28T08:00:00+08:00",
+        "taxi_count": 3200,
+        "locations": {
+          "type": "FeatureCollection",
+          "features": [
+            { "type": "Feature", "geometry": { "type": "Point", "coordinates": [103.832, 1.304] }, "properties": null },
+            { "type": "Feature", "geometry": { "type": "Point", "coordinates": [103.851, 1.290] }, "properties": null }
+          ]
+        }
+      },
+      {
+        "timestamp": "2026-02-28T08:01:00+08:00",
+        "taxi_count": 3215,
+        "locations": {
+          "type": "FeatureCollection",
+          "features": [
+            { "type": "Feature", "geometry": { "type": "Point", "coordinates": [103.833, 1.305] }, "properties": null }
+          ]
+        }
       }
-    },
-    {
-      "timestamp": "2026-02-28T08:01:00+08:00",
-      "taxi_count": 3215,
-      "locations": {
-        "type": "FeatureCollection",
-        "features": [
-          { "type": "Feature", "geometry": { "type": "Point", "coordinates": [103.833, 1.305] }, "properties": null }
-        ]
-      }
-    }
-  ]
+    ]
+  },
+  "error": null
 }
 ```
 
@@ -498,44 +577,38 @@ Returns per-snapshot taxi positions across the lookback window. Designed for Map
 **Response**:
 ```json
 {
-  "window_minutes": 15,
-  "from_time": "2026-02-28T08:00:00+08:00",
-  "to_time": "2026-02-28T08:15:00+08:00",
-  "snapshots": [
-    {
-      "timestamp": "2026-02-28T08:00:00+08:00",
-      "taxi_count": 3200,
-      "locations": {
-        "type": "FeatureCollection",
-        "features": [
-          { "type": "Feature", "geometry": { "type": "Point", "coordinates": [103.832, 1.304] }, "properties": null },
-          { "type": "Feature", "geometry": { "type": "Point", "coordinates": [103.851, 1.290] }, "properties": null }
-        ]
+  "success": true,
+  "data": {
+    "type": "timeline",
+    "from_time": "2026-02-28T08:00:00+08:00",
+    "to_time": "2026-02-28T08:15:00+08:00",
+    "window_minutes": 15,
+    "snapshots": [
+      {
+        "timestamp": "2026-02-28T08:00:00+08:00",
+        "taxi_count": 3200,
+        "locations": {
+          "type": "FeatureCollection",
+          "features": [
+            { "type": "Feature", "geometry": { "type": "Point", "coordinates": [103.832, 1.304] }, "properties": null },
+            { "type": "Feature", "geometry": { "type": "Point", "coordinates": [103.851, 1.290] }, "properties": null }
+          ]
+        }
+      },
+      {
+        "timestamp": "2026-02-28T08:01:00+08:00",
+        "taxi_count": 3230,
+        "locations": {
+          "type": "FeatureCollection",
+          "features": [
+            { "type": "Feature", "geometry": { "type": "Point", "coordinates": [103.833, 1.305] }, "properties": null }
+          ]
+        }
       }
-    },
-    {
-      "timestamp": "2026-02-28T08:01:00+08:00",
-      "taxi_count": 3230,
-      "locations": {
-        "type": "FeatureCollection",
-        "features": [
-          { "type": "Feature", "geometry": { "type": "Point", "coordinates": [103.833, 1.305] }, "properties": null }
-        ]
-      }
-    }
-  ]
+    ]
+  },
+  "error": null
 }
-```
-
-**Frontend usage (Mapbox)**:
-```js
-// Load once
-map.addSource('taxis', { type: 'geojson', data: response.snapshots[0].locations });
-
-// On timeline slide
-const snap = response.snapshots[sliderIndex];
-map.getSource('taxis').setData(snap.locations);
-countLabel.text = snap.taxi_count;
 ```
 
 ---
@@ -559,15 +632,17 @@ Zone geometry is static — the response includes `Cache-Control: max-age=86400`
 **Response (district → Polygon)**:
 ```json
 {
-  "type": "Feature",
-  "properties": {
+  "success": true,
+  "data": {
+    "type": "zone_geometry",
     "name": "tampines",
-    "category": "district"
+    "category": "district",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [[[103.80, 1.34], [103.85, 1.34], [103.85, 1.37], [103.80, 1.37], [103.80, 1.34]]]
+    }
   },
-  "geometry": {
-    "type": "Polygon",
-    "coordinates": [[[103.80, 1.34], [103.85, 1.34], [103.85, 1.37], [103.80, 1.37], [103.80, 1.34]]]
-  }
+  "error": null
 }
 ```
 
@@ -576,15 +651,17 @@ Zone geometry is static — the response includes `Cache-Control: max-age=86400`
 **Response (highway → LineString)**:
 ```json
 {
-  "type": "Feature",
-  "properties": {
+  "success": true,
+  "data": {
+    "type": "zone_geometry",
     "name": "aye",
-    "category": "highway"
+    "category": "highway",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [[103.74, 1.28], [103.76, 1.29], [103.80, 1.30]]
+    }
   },
-  "geometry": {
-    "type": "LineString",
-    "coordinates": [[103.74, 1.28], [103.76, 1.29], [103.80, 1.30]]
-  }
+  "error": null
 }
 ```
 
@@ -630,14 +707,25 @@ com.gov.app
 │       └── TaxiPosition.java         # R2DBC entity → taxi_positions
 │
 ├── dto
-│   ├── TaxiNearbyRequest.java
-│   ├── TaxiNearbyResponse.java
-│   ├── TaxiNearestResponse.java
-│   ├── TaxiZoneCountResponse.java
-│   ├── TaxiPolygonRequest.java
-│   ├── TaxiRouteRequest.java
-│   ├── TaxiHistoryResponse.java
-│   ├── TaxiTimelineResponse.java
+│   ├── response
+│   │   ├── ApiResponse.java          # Generic envelope: success / data / error
+│   │   ├── ApiError.java             # Error payload: code / message / details
+│   │   ├── TaxiResponseData.java     # @JsonTypeInfo sealed interface for data union
+│   │   ├── SpatialQueryData.java     # data.type = "spatial_query"
+│   │   ├── TimelineData.java         # data.type = "timeline"
+│   │   ├── ZoneGeometryData.java     # data.type = "zone_geometry"
+│   │   └── SnapshotEntry.java        # Item inside TimelineData.snapshots
+│   ├── context
+│   │   ├── QueryContext.java         # @JsonTypeInfo sealed interface for context union
+│   │   ├── RadiusContext.java        # context.type = "radius"
+│   │   ├── NearestContext.java       # context.type = "nearest"
+│   │   ├── ZoneContext.java          # context.type = "zone"
+│   │   ├── PolygonContext.java       # context.type = "polygon"
+│   │   ├── RoadContext.java          # context.type = "road"
+│   │   └── RouteContext.java         # context.type = "route"
+│   ├── request
+│   │   ├── TaxiPolygonRequest.java
+│   │   └── TaxiRouteRequest.java
 │   └── upstream
 │       └── GovTaxiResponse.java      # Maps data.gov.sg GeoJSON response
 │
@@ -721,14 +809,29 @@ spring:
 
 ## 8. Error Handling
 
-| Scenario | HTTP Status | Exception class |
-|----------|-------------|-----------------|
-| Upstream API unavailable | 502 Bad Gateway | `UpstreamException` |
-| Unknown zone name | 404 Not Found | `NotFoundException` |
-| Invalid coordinates / radius ≤ 0 | 400 Bad Request | `ValidationException` |
-| No snapshot available at `datetime` | 404 Not Found | `NotFoundException` |
+All errors are returned inside the standard envelope (`success: false`, `data: null`):
 
-All handled by the existing `GlobalExceptionHandler`.
+```json
+{
+  "success": false,
+  "data": null,
+  "error": {
+    "code": "NOT_FOUND",
+    "message": "Zone 'xyz' not found",
+    "details": { "field": "zoneName", "value": "xyz" }
+  }
+}
+```
+
+| Scenario | HTTP Status | `error.code` | Exception class |
+|----------|-------------|--------------|-----------------|
+| Upstream API unavailable | 502 Bad Gateway | `UPSTREAM_ERROR` | `UpstreamException` |
+| Unknown zone name | 404 Not Found | `NOT_FOUND` | `NotFoundException` |
+| Invalid coordinates / radius ≤ 0 | 400 Bad Request | `VALIDATION_ERROR` | `ValidationException` |
+| No snapshot available at `datetime` | 404 Not Found | `NOT_FOUND` | `NotFoundException` |
+| Malformed request body | 400 Bad Request | `BAD_REQUEST` | `BusinessException` |
+
+`GlobalExceptionHandler` maps each exception to `ApiResponse.fail(ApiError)` — the frontend always reads `res.success` first, then `res.error.code` to decide how to display the error.
 
 ---
 
