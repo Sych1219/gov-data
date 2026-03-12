@@ -169,7 +169,7 @@ public class TaxiController {
 
     /** 4.7 Historical snapshots in a time range */
     @Operation(summary = "Historical snapshots in a time range",
-               description = "Returns per-snapshot taxi positions between `start` and `end`, optionally filtered by zone.")
+               description = "Returns per-snapshot taxi positions between `start` and `end`. If `zone` is omitted, returns all taxis across Singapore. If `zone` is provided, returns only taxis within that named area.")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Invalid time range or range exceeds 7 days",
@@ -185,7 +185,7 @@ public class TaxiController {
             @Parameter(description = "End of range, ISO-8601 SGT", example = "2026-03-09T08:00:00+08:00", required = true)
             @RequestParam @Iso8601Sgt String end,
 
-            @Parameter(description = "Optional zone filter, e.g. 'CBD'")
+            @Parameter(description = "Optional zone name to filter results to a specific area (e.g. 'Punggol', 'CBD', 'Changi'). When a location or area is mentioned in the query, pass its name here.", example = "Punggol")
             @RequestParam(required = false) String zone) {
         log.info("GET /history/snapshots - start={}, end={}, zone={}", start, end, zone);
         return queryService.getHistory(start, end, zone).map(ApiResponse::ok);
