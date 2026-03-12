@@ -11,9 +11,12 @@ import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import com.gov.app.validation.Iso8601Sgt;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Positive;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -55,7 +58,7 @@ public class TaxiController {
             @RequestParam(defaultValue = "100") @Positive int limit,
 
             @Parameter(description = "Target time ISO-8601 SGT. Defaults to latest snapshot.", example = "2025-01-15T08:30:00+08:00")
-            @RequestParam(required = false) String datetime) {
+            @RequestParam(required = false) @Iso8601Sgt String datetime) {
         log.info("GET /nearby - lat={}, lon={}, radius={}, limit={}, datetime={}", lat, lon, radius, limit, datetime);
         return queryService.nearby(lat, lon, radius, limit, datetime).map(ApiResponse::ok);
     }
@@ -80,7 +83,7 @@ public class TaxiController {
             @RequestParam(defaultValue = "5") @Positive int limit,
 
             @Parameter(description = "Target time ISO-8601 SGT. Defaults to latest snapshot.", example = "2025-01-15T08:30:00+08:00")
-            @RequestParam(required = false) String datetime) {
+            @RequestParam(required = false) @Iso8601Sgt String datetime) {
         log.info("GET /nearest - lat={}, lon={}, limit={}, datetime={}", lat, lon, limit, datetime);
         return queryService.findNearest(lat, lon, limit, datetime).map(ApiResponse::ok);
     }
@@ -98,10 +101,10 @@ public class TaxiController {
     @GetMapping("/zone/{zoneName}/count")
     public Mono<ApiResponse<TaxiResponseData>> zoneCount(
             @Parameter(description = "Zone identifier, e.g. 'CBD', 'Changi'", example = "CBD")
-            @PathVariable String zoneName,
+            @PathVariable @NotBlank String zoneName,
 
             @Parameter(description = "Target time ISO-8601 SGT. Defaults to latest snapshot.", example = "2025-01-15T08:30:00+08:00")
-            @RequestParam(required = false) String datetime) {
+            @RequestParam(required = false) @Iso8601Sgt String datetime) {
         log.info("GET /zone/{}/count - datetime={}", zoneName, datetime);
         return queryService.countInZone(zoneName, datetime).map(ApiResponse::ok);
     }
@@ -135,13 +138,13 @@ public class TaxiController {
     @GetMapping("/road/{roadName}/count")
     public Mono<ApiResponse<TaxiResponseData>> roadCount(
             @Parameter(description = "Road or highway name, e.g. 'PIE', 'Orchard Road'", example = "PIE")
-            @PathVariable String roadName,
+            @PathVariable @NotBlank String roadName,
 
             @Parameter(description = "Buffer distance in metres", example = "100")
             @RequestParam(defaultValue = "100") @Positive int buffer_m,
 
             @Parameter(description = "Target time ISO-8601 SGT. Defaults to latest snapshot.", example = "2025-01-15T08:30:00+08:00")
-            @RequestParam(required = false) String datetime) {
+            @RequestParam(required = false) @Iso8601Sgt String datetime) {
         log.info("GET /road/{}/count - buffer_m={}, datetime={}", roadName, buffer_m, datetime);
         return queryService.countNearRoad(roadName, buffer_m, datetime).map(ApiResponse::ok);
     }
@@ -177,10 +180,10 @@ public class TaxiController {
     @GetMapping("/history/snapshots")
     public Mono<ApiResponse<TaxiResponseData>> historySnapshots(
             @Parameter(description = "Start of range, ISO-8601 SGT", example = "2026-03-09T00:00:00+08:00", required = true)
-            @RequestParam String start,
+            @RequestParam @Iso8601Sgt String start,
 
             @Parameter(description = "End of range, ISO-8601 SGT", example = "2026-03-09T08:00:00+08:00", required = true)
-            @RequestParam String end,
+            @RequestParam @Iso8601Sgt String end,
 
             @Parameter(description = "Optional zone filter, e.g. 'CBD'")
             @RequestParam(required = false) String zone) {
@@ -195,7 +198,7 @@ public class TaxiController {
     @GetMapping("/history/recent")
     public Mono<ApiResponse<TaxiResponseData>> recentActivity(
             @Parameter(description = "Look-back window in minutes", example = "15")
-            @RequestParam(defaultValue = "15") int minutes) {
+            @RequestParam(defaultValue = "15") @Positive @Max(1440) int minutes) {
         log.info("GET /history/recent - minutes={}", minutes);
         return queryService.getRecentTimeline(minutes).map(ApiResponse::ok);
     }
