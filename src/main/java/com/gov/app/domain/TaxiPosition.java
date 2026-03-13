@@ -8,6 +8,8 @@ import org.springframework.data.annotation.Id;
 import org.springframework.data.relational.core.mapping.Column;
 import org.springframework.data.relational.core.mapping.Table;
 
+import java.time.OffsetDateTime;
+
 @Data
 @Builder
 @NoArgsConstructor
@@ -20,6 +22,9 @@ public class TaxiPosition {
 
     @Column("snapshot_id")
     private Long snapshotId;
+
+    @Column("api_timestamp")
+    private OffsetDateTime apiTimestamp;
 
     private double longitude;
 

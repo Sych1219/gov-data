@@ -6,6 +6,7 @@ import org.springframework.stereotype.Repository;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.time.OffsetDateTime;
 import java.util.List;
 
 /**
@@ -22,17 +23,18 @@ public class TaxiPositionRepository {
     /**
      * Batch-inserts taxi positions for a snapshot using unnest for efficiency.
      */
-    public Mono<Void> batchInsert(long snapshotId, List<Double> lons, List<Double> lats) {
+    public Mono<Void> batchInsert(long snapshotId, OffsetDateTime apiTimestamp, List<Double> lons, List<Double> lats) {
         Double[] lonsArr = lons.toArray(new Double[0]);
         Double[] latsArr = lats.toArray(new Double[0]);
 
         String sql = """
-                INSERT INTO taxi_positions (snapshot_id, longitude, latitude)
-                SELECT :snapshotId, unnest(:lons::float8[]), unnest(:lats::float8[])
+                INSERT INTO taxi_positions (snapshot_id, api_timestamp, longitude, latitude)
+                SELECT :snapshotId, :apiTimestamp, unnest(:lons::float8[]), unnest(:lats::float8[])
                 """;
 
         return db.sql(sql)
                 .bind("snapshotId", snapshotId)
+                .bind("apiTimestamp", apiTimestamp)
                 .bind("lons", lonsArr)
                 .bind("lats", latsArr)
                 .fetch()
@@ -120,7 +122,7 @@ public class TaxiPositionRepository {
                 FROM taxi_positions tp
                 JOIN zones z ON z.name = :zoneName
                 WHERE tp.snapshot_id = :snapshotId
-                  AND ST_Within(tp.geog::geometry, z.geog::geometry)
+                  AND ST_Covers(z.geog, tp.geog)
                 """;
         return db.sql(sql)
                 .bind("snapshotId", snapshotId)
@@ -191,7 +193,7 @@ public class TaxiPositionRepository {
                 FROM taxi_positions tp
                 JOIN zones z ON z.name = :zoneName
                 WHERE tp.snapshot_id = :snapshotId
-                  AND ST_Within(tp.geog::geometry, z.geog::geometry)
+                  AND ST_Covers(z.geog, tp.geog)
                 """;
         return db.sql(sql)
                 .bind("snapshotId", snapshotId)

@@ -38,7 +38,7 @@
 | Endpoint | `GET https://api.data.gov.sg/v1/transport/taxi-availability` |
 | Optional param | `date_time` — `YYYY-MM-DD[T]HH:mm:ss` (SGT) |
 | Response format | GeoJSON (`application/vnd.geo+json`) |
-| Recommended poll interval | **1 minute** |
+| Recommended poll interval | **10 minutes** |
 | Auth | `x-api-key` header (optional, for higher rate limits) |
 
 ### 2.2 Scheduled Fetch Flow
@@ -90,48 +90,70 @@ CREATE EXTENSION IF NOT EXISTS postgis;
 
 ```sql
 -- ── Snapshot metadata (one row per API poll) ────────────────────
-CREATE TABLE taxi_snapshots (
-    id           BIGSERIAL PRIMARY KEY,
-    fetched_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),   -- when we polled
-    api_timestamp TIMESTAMPTZ NOT NULL,                -- LTA data timestamp
-    taxi_count   INTEGER     NOT NULL
+CREATE TABLE IF NOT EXISTS taxi_snapshots (
+    id            BIGSERIAL    PRIMARY KEY,
+    api_timestamp TIMESTAMPTZ  NOT NULL,
+    taxi_count    INT          NOT NULL,
+    fetched_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_snapshots_fetched_at ON taxi_snapshots (fetched_at DESC);
+CREATE INDEX IF NOT EXISTS idx_taxi_snapshots_api_timestamp
+    ON taxi_snapshots (api_timestamp DESC);
 
--- ── Individual taxi positions ────────────────────────────────────
-CREATE TABLE taxi_positions (
-    id          BIGSERIAL PRIMARY KEY,
-    snapshot_id BIGINT  NOT NULL REFERENCES taxi_snapshots(id) ON DELETE CASCADE,
-    longitude   DOUBLE PRECISION NOT NULL,
-    latitude    DOUBLE PRECISION NOT NULL,
-    location    GEOMETRY(POINT, 4326) NOT NULL    -- PostGIS spatial column
-                GENERATED ALWAYS AS (ST_SetSRID(ST_MakePoint(longitude, latitude), 4326)) STORED
+-- ── Individual taxi positions (partitioned by api_timestamp, SGT-day aligned) ─
+-- Partitioned by RANGE on api_timestamp (UTC). Each partition covers one SGT day:
+--   SGT day YYYY-MM-DD = UTC (YYYY-MM-(DD-1) 16:00:00+00) to (YYYY-MM-DD 16:00:00+00)
+-- NOTE: FK constraints are not supported on partitioned tables in PostgreSQL.
+--       Referential integrity is enforced at the application layer.
+-- NOTE: Daily partitions must be created manually before each SGT day starts.
+--       The default partition below acts as a safety net for unmapped rows.
+CREATE SEQUENCE IF NOT EXISTS taxi_positions_id_seq;
+
+CREATE TABLE IF NOT EXISTS taxi_positions (
+    id            BIGINT      NOT NULL DEFAULT nextval('taxi_positions_id_seq'),
+    snapshot_id   BIGINT      NOT NULL,
+    api_timestamp TIMESTAMPTZ NOT NULL,
+    longitude     FLOAT8      NOT NULL,
+    latitude      FLOAT8      NOT NULL,
+    geog          GEOGRAPHY(POINT, 4326)
+                      GENERATED ALWAYS AS (
+                          ST_SetSRID(ST_MakePoint(longitude, latitude), 4326)::geography
+                      ) STORED,
+    PRIMARY KEY (id, api_timestamp)
+) PARTITION BY RANGE (api_timestamp);
+
+-- Safety net partition — catches rows with no matching daily partition
+CREATE TABLE IF NOT EXISTS taxi_positions_default
+    PARTITION OF taxi_positions DEFAULT;
+
+CREATE INDEX IF NOT EXISTS idx_taxi_positions_snapshot_id
+    ON taxi_positions (snapshot_id);
+CREATE INDEX IF NOT EXISTS idx_taxi_positions_geog
+    ON taxi_positions USING GIST (geog);
+CREATE INDEX IF NOT EXISTS idx_taxi_positions_api_timestamp
+    ON taxi_positions (api_timestamp DESC);
+
+-- ── Pre-defined named zones (districts, roads, highways) ─────────────────────
+CREATE TABLE IF NOT EXISTS zones (
+    id       SERIAL  PRIMARY KEY,
+    name     TEXT    NOT NULL UNIQUE,
+    category TEXT    NOT NULL,   -- 'district' | 'road' | 'highway'
+    geog     GEOGRAPHY NOT NULL
 );
 
-CREATE INDEX idx_positions_location    ON taxi_positions USING GIST(location);
-CREATE INDEX idx_positions_snapshot_id ON taxi_positions (snapshot_id);
-
--- ── Pre-defined named zones (Singapore districts / roads) ────────
-CREATE TABLE zones (
-    id       SERIAL PRIMARY KEY,
-    name     VARCHAR(100) UNIQUE NOT NULL,   -- e.g. 'tampines', 'cbd', 'orchard-road'
-    category VARCHAR(20)  NOT NULL,          -- 'district' | 'road' | 'highway'
-    boundary GEOMETRY(GEOMETRY, 4326) NOT NULL  -- Polygon or LineString
-);
-
-CREATE INDEX idx_zones_boundary ON zones USING GIST(boundary);
-CREATE INDEX idx_zones_name     ON zones (name);
+CREATE INDEX IF NOT EXISTS idx_zones_name     ON zones (name);
+CREATE INDEX IF NOT EXISTS idx_zones_name_trgm ON zones USING GIN (name gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_zones_geog     ON zones USING GIST (geog);
 ```
 
 ### 3.3 Data Retention Strategy
 
 | Concern | Approach |
 |---------|----------|
-| Raw volume | ~8 000 taxis × 1440 polls/day ≈ **11.5 M rows/day** |
+| Raw volume | ~8 000 taxis × 144 polls/day (10-min interval) ≈ **1.15 M rows/day** |
 | Retention | Keep last **7 days** of full-resolution data; older data is summarised |
-| Cleanup job | Daily scheduled task: `DELETE FROM taxi_positions WHERE snapshot_id IN (SELECT id FROM taxi_snapshots WHERE fetched_at < NOW() - INTERVAL '7 days')` |
-| Partitioning | Partition `taxi_positions` by day (`PARTITION BY RANGE (snapshot_id)`) for fast pruning |
+| Cleanup job | Drop old daily partitions: `DROP TABLE taxi_positions_YYYY_MM_DD` — instant, no row-by-row delete |
+| Partitioning | `taxi_positions` partitioned by `PARTITION BY RANGE (api_timestamp)` — one partition per SGT day (UTC boundary: `(DD-1) 16:00:00+00` to `DD 16:00:00+00`) |
 
 ---
 
@@ -195,7 +217,7 @@ FROM taxi_positions tp
 JOIN taxi_snapshots ts ON tp.snapshot_id = ts.id
 WHERE ts.id = :snapshotId
   AND ST_DWithin(
-        tp.location::geography,
+        tp.geog,
         ST_SetSRID(ST_MakePoint(:lon, :lat), 4326)::geography,
         :radiusMetres
       );
@@ -244,12 +266,12 @@ GET /api/v1/taxis/nearest
 ```sql
 SELECT longitude, latitude,
        ST_Distance(
-           tp.location::geography,
+           tp.geog,
            ST_SetSRID(ST_MakePoint(:lon, :lat), 4326)::geography
        ) AS distance_m
 FROM taxi_positions tp
 WHERE snapshot_id = :snapshotId
-ORDER BY tp.location <-> ST_SetSRID(ST_MakePoint(:lon, :lat), 4326)
+ORDER BY tp.geog <-> ST_SetSRID(ST_MakePoint(:lon, :lat), 4326)::geography
 LIMIT :limit;
 ```
 
@@ -296,7 +318,7 @@ SELECT COUNT(*) AS taxi_count
 FROM taxi_positions tp
 JOIN zones z ON z.name = :zoneName
 WHERE tp.snapshot_id = :snapshotId
-  AND ST_Within(tp.location, z.boundary);
+  AND ST_Covers(z.geog, tp.geog);
 ```
 
 **Example**: `GET /api/v1/taxis/zone/tampines/count`
@@ -346,7 +368,7 @@ POST /api/v1/taxis/polygon/count
 SELECT COUNT(*) AS taxi_count
 FROM taxi_positions tp
 WHERE tp.snapshot_id = :snapshotId
-  AND ST_Within(tp.location, ST_GeomFromGeoJSON(:polygonGeoJson));
+  AND ST_Covers(ST_GeomFromGeoJSON(:polygonGeoJson)::geography, tp.geog);
 ```
 
 **Response**:
@@ -399,8 +421,8 @@ FROM taxi_positions tp
 JOIN zones z ON z.name = :roadName AND z.category IN ('road', 'highway')
 WHERE tp.snapshot_id = :snapshotId
   AND ST_DWithin(
-        tp.location::geography,
-        z.boundary::geography,
+        tp.geog,
+        z.geog,
         :bufferMetres
       );
 ```
@@ -453,8 +475,8 @@ SELECT COUNT(*) AS taxi_count
 FROM taxi_positions tp
 WHERE tp.snapshot_id = :snapshotId
   AND ST_DWithin(
-        tp.location::geography,
-        ST_GeomFromGeoJSON(:routeGeoJson)::geography,
+        tp.geog,
+        ST_GeomFromGeoJSON(:routeGeoJson)::geography,   -- cast geometry → geography
         :bufferMetres
       );
 ```
@@ -517,7 +539,7 @@ FROM taxi_snapshots ts
 JOIN taxi_positions tp ON tp.snapshot_id = ts.id
 JOIN zones z ON z.name = :zoneName
 WHERE ts.api_timestamp BETWEEN :start AND :end
-  AND ST_Within(tp.location, z.boundary)
+  AND ST_Covers(z.geog, tp.geog)
 GROUP BY ts.api_timestamp
 ORDER BY ts.api_timestamp;
 ```
@@ -772,9 +794,9 @@ Returns the latest snapshot **at or before** the requested time.
 Use `DatabaseClient.inConnectionMany()` for bulk insert of taxi positions per snapshot to avoid N individual R2DBC inserts:
 
 ```java
-// Bulk insert with unnest
-INSERT INTO taxi_positions (snapshot_id, longitude, latitude)
-SELECT :snapshotId, unnest(:lons::float8[]), unnest(:lats::float8[])
+// Bulk insert with unnest — api_timestamp required as partition key
+INSERT INTO taxi_positions (snapshot_id, api_timestamp, longitude, latitude)
+SELECT :snapshotId, :apiTimestamp, unnest(:lons::float8[]), unnest(:lats::float8[])
 ```
 
 ### 6.4 Zone Data Seeding

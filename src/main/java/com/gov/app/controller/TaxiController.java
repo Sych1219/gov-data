@@ -98,10 +98,10 @@ public class TaxiController {
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Invalid parameters",
             content = @Content(schema = @Schema(ref = "#/components/schemas/ErrorResponse")))
     })
-    @GetMapping("/zone/{zoneName}/count")
+    @GetMapping("/zone/count")
     public Mono<ApiResponse<TaxiResponseData>> zoneCount(
             @Parameter(description = "Zone identifier, e.g. 'CBD', 'Changi'", example = "CBD")
-            @PathVariable @NotBlank String zoneName,
+            @RequestParam @NotBlank String zoneName,
 
             @Parameter(description = "Target time ISO-8601 SGT. Defaults to latest snapshot.", example = "2025-01-15T08:30:00+08:00")
             @RequestParam(required = false) @Iso8601Sgt String datetime) {
@@ -135,10 +135,10 @@ public class TaxiController {
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Invalid parameters",
             content = @Content(schema = @Schema(ref = "#/components/schemas/ErrorResponse")))
     })
-    @GetMapping("/road/{roadName}/count")
+    @GetMapping("/road/count")
     public Mono<ApiResponse<TaxiResponseData>> roadCount(
             @Parameter(description = "Road or highway name, e.g. 'PIE', 'Orchard Road'", example = "PIE")
-            @PathVariable @NotBlank String roadName,
+            @RequestParam @NotBlank String roadName,
 
             @Parameter(description = "Buffer distance in metres", example = "100")
             @RequestParam(defaultValue = "100") @Positive int buffer_m,

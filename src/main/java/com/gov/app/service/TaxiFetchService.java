@@ -74,7 +74,7 @@ public class TaxiFetchService {
                     }
                     log.info("Saved snapshot id={} timestamp={} taxiCount={}",
                             saved.getId(), apiTimestamp, props.getTaxiCount());
-                    return positionRepository.batchInsert(saved.getId(), lons, lats);
+                    return positionRepository.batchInsert(saved.getId(), apiTimestamp, lons, lats);
                 });
     }
 }
