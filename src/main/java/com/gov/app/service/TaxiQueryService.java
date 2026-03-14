@@ -210,7 +210,7 @@ public class TaxiQueryService {
         }
 
         if (zoneName == null) {
-            return buildTimeline(startTime, endTime, null);
+            return buildTimeline(startTime, endTime, null, null);
         }
 
         return zoneRepository.findBestDistrictMatch(zoneName, 0.3)
@@ -222,10 +222,11 @@ public class TaxiQueryService {
                                         "Did you mean: " + suggestions + "? " +
                                         "Check GET /api/v1/zones for all available zone names.")))
                 )
-                .flatMap(resolvedName -> buildTimeline(startTime, endTime, resolvedName));
+                .flatMap(resolvedName -> buildTimeline(startTime, endTime, resolvedName,
+                        ZoneContext.builder().zoneName(resolvedName).category("district").build()));
     }
 
-    private Mono<TimelineData> buildTimeline(OffsetDateTime from, OffsetDateTime to, String zoneName) {
+    private Mono<TimelineData> buildTimeline(OffsetDateTime from, OffsetDateTime to, String zoneName, QueryContext context) {
         return snapshotRepository.findByApiTimestampBetweenOrderByApiTimestampAsc(from, to)
                 .flatMapSequential(snapshot -> {
                     Mono<Long> countMono = zoneName == null
@@ -246,6 +247,7 @@ public class TaxiQueryService {
                         .fromTime(entries.isEmpty() ? from : entries.get(0).getTimestamp())
                         .toTime(entries.isEmpty() ? to : entries.get(entries.size() - 1).getTimestamp())
                         .windowMinutes((int) Duration.between(from, to).toMinutes())
+                        .context(context)
                         .snapshots(entries)
                         .build());
     }

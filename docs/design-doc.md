@@ -188,7 +188,7 @@ The `data` field is a **tagged union** — a `type` discriminator field determin
 | `timeline` | `/history/snapshots`, `/history/recent` |
 | `zone_geometry` | `/zones/*/geometry` |
 
-Within `spatial_query`, a nested `context` object captures the query parameters, also discriminated by `context.type`:
+Both `spatial_query` and `timeline` carry an optional `context` object that captures the query parameters, discriminated by `context.type` (for `timeline`, `context` is present when a zone/spatial filter was applied, `null` otherwise):
 
 | `context.type` | Endpoint |
 |---|---|
@@ -553,6 +553,7 @@ ORDER BY ts.api_timestamp;
     "type": "timeline",
     "from_time": "2026-02-28T08:00:00+08:00",
     "to_time": "2026-02-28T09:00:00+08:00",
+    "context": { "type": "zone", "zone_name": "cbd", "category": "district" },
     "snapshots": [
       {
         "timestamp": "2026-02-28T08:00:00+08:00",

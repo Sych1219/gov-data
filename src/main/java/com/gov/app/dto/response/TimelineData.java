@@ -3,6 +3,7 @@ package com.gov.app.dto.response;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.gov.app.dto.GeoJsonFeatureCollection;
+import com.gov.app.dto.context.QueryContext;
 import lombok.Builder;
 import lombok.Value;
 
@@ -22,6 +23,9 @@ public final class TimelineData implements TaxiResponseData {
     @JsonInclude(JsonInclude.Include.NON_NULL)
     @JsonProperty("window_minutes")
     Integer windowMinutes;
+
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    QueryContext context;
 
     List<SnapshotEntry> snapshots;
 
