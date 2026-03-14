@@ -105,8 +105,8 @@ public class ZoneController {
 
     private String suggestedEndpoint(Zone zone) {
         return switch (zone.getCategory()) {
-            case "district" -> "GET /api/v1/taxis/zone/" + zone.getName() + "/count";
-            case "road", "highway" -> "GET /api/v1/taxis/road/" + zone.getName() + "/count";
+            case "district" -> "GET /api/v1/taxis/zone/count?zoneName=" + zone.getName();
+            case "road", "highway" -> "GET /api/v1/taxis/road/count?roadName=" + zone.getName();
             default -> "GET /api/v1/zones";
         };
     }

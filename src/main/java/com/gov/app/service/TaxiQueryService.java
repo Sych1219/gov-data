@@ -94,7 +94,7 @@ public class TaxiQueryService {
                         zoneRepository.findBestRoadMatch(zoneName, 0.3)
                                 .flatMap(roadMatch -> Mono.<String>error(new NotFoundException(
                                         "'" + zoneName + "' is not a district — it matched a road/highway '" + roadMatch + "'. " +
-                                        "Use GET /api/v1/taxis/road/" + roadMatch + "/count instead.")))
+                                        "Use GET /api/v1/taxis/road/count?roadName=" + roadMatch + " instead.")))
                                 .switchIfEmpty(
                                         zoneRepository.findDistrictSuggestions(zoneName, 3)
                                                 .collectList()

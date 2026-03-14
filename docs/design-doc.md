@@ -301,15 +301,12 @@ LIMIT :limit;
 ### 4.3 🗺 Zone / District Query
 
 ```
-GET /api/v1/taxis/zone/{zoneName}/count
+GET /api/v1/taxis/zone/count?zoneName={zoneName}&datetime={datetime}
 ```
-
-| Path Param | Description |
-|------------|-------------|
-| `zoneName` | Pre-defined zone name, e.g. `tampines`, `jurong-west`, `cbd` |
 
 | Query Param | Type | Required | Description |
 |-------------|------|----------|-------------|
+| `zoneName` | string | ✅ | Pre-defined zone name, e.g. `tampines`, `jurong-west`, `cbd` |
 | `datetime` | string | ❌ | Target time |
 
 **Core SQL**:
@@ -321,7 +318,7 @@ WHERE tp.snapshot_id = :snapshotId
   AND ST_Covers(z.geog, tp.geog);
 ```
 
-**Example**: `GET /api/v1/taxis/zone/tampines/count`
+**Example**: `GET /api/v1/taxis/zone/count?zoneName=tampines`
 
 **Response**:
 ```json
@@ -402,15 +399,12 @@ WHERE tp.snapshot_id = :snapshotId
 ### 4.5 🛣 Road / Highway Query
 
 ```
-GET /api/v1/taxis/road/{roadName}/count
+GET /api/v1/taxis/road/count?roadName={roadName}&buffer_m={buffer_m}&datetime={datetime}
 ```
-
-| Path Param | Description |
-|------------|-------------|
-| `roadName` | Pre-loaded road name, e.g. `orchard-road`, `pie`, `cte` |
 
 | Query Param | Type | Required | Description |
 |-------------|------|----------|-------------|
+| `roadName` | string | ✅ | Pre-loaded road name, e.g. `orchard-road`, `pie`, `cte` |
 | `buffer_m` | integer | ❌ | Buffer around road in metres, default `100` |
 | `datetime` | string | ❌ | Target time |
 
@@ -427,7 +421,7 @@ WHERE tp.snapshot_id = :snapshotId
       );
 ```
 
-**Example**: `GET /api/v1/taxis/road/orchard-road/count?buffer_m=150`
+**Example**: `GET /api/v1/taxis/road/count?roadName=orchard-road&buffer_m=150`
 
 **Response**:
 ```json
@@ -695,9 +689,9 @@ Zone geometry is static — the response includes `Cache-Control: max-age=86400`
 |---|--------|------|-------------|
 | 1 | GET | `/api/v1/taxis/nearby` | Taxis within radius (count + GeoJSON) |
 | 2 | GET | `/api/v1/taxis/nearest` | Nearest N taxis with distance |
-| 3 | GET | `/api/v1/taxis/zone/{zoneName}/count` | Count in named zone |
+| 3 | GET | `/api/v1/taxis/zone/count?zoneName=` | Count in named zone |
 | 4 | POST | `/api/v1/taxis/polygon/count` | Count in custom GeoJSON polygon |
-| 5 | GET | `/api/v1/taxis/road/{roadName}/count` | Count near road/highway |
+| 5 | GET | `/api/v1/taxis/road/count?roadName=` | Count near road/highway |
 | 6 | POST | `/api/v1/taxis/route/count` | Count along a route buffer |
 | 7 | GET | `/api/v1/taxis/history/snapshots` | Time-range taxi count history |
 | 8 | GET | `/api/v1/taxis/history/recent` | Recently online taxi delta |

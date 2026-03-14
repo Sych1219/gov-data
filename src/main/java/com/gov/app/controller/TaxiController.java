@@ -105,7 +105,7 @@ public class TaxiController {
 
             @Parameter(description = "Target time ISO-8601 SGT. Defaults to latest snapshot.", example = "2025-01-15T08:30:00+08:00")
             @RequestParam(required = false) @Iso8601Sgt String datetime) {
-        log.info("GET /zone/{}/count - datetime={}", zoneName, datetime);
+        log.info("GET /zone/count - zoneName={}, datetime={}", zoneName, datetime);
         return queryService.countInZone(zoneName, datetime).map(ApiResponse::ok);
     }
 
@@ -145,7 +145,7 @@ public class TaxiController {
 
             @Parameter(description = "Target time ISO-8601 SGT. Defaults to latest snapshot.", example = "2025-01-15T08:30:00+08:00")
             @RequestParam(required = false) @Iso8601Sgt String datetime) {
-        log.info("GET /road/{}/count - buffer_m={}, datetime={}", roadName, buffer_m, datetime);
+        log.info("GET /road/count - roadName={}, buffer_m={}, datetime={}", roadName, buffer_m, datetime);
         return queryService.countNearRoad(roadName, buffer_m, datetime).map(ApiResponse::ok);
     }
 
