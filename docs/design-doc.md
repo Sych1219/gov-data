@@ -1,5 +1,10 @@
 # Taxi Availability Service — Design Document
 
+> **Cross-repo docs** — when updating this file, also check:
+> - `civic-app` → `design-docs/MVP-taxi-spatial-qa.md` — consumes endpoints via OpenAPI toolkit; documents `data.type`/`context.type` unions (§7.1), query params (§6.3 UNITS), `{success, data, error}` envelope (§7.1), data model shapes (§7.1)
+> - `civic-frontend` → `docs/apis-data-contract.md` — documents `POST /api/v1/query` endpoint, `data.type`/`context.type` unions, `{answer, data, metadata}` envelope, data model shapes, error codes, GeoJSON types
+> - Full index: `civic-frontend/docs/cross-repo-index.md`
+
 > **Stack**: Java 21 · Spring Boot 3.3.4 · WebFlux (reactive) · R2DBC · PostgreSQL + PostGIS · Lombok
 
 ---

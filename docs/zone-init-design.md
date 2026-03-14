@@ -1,5 +1,10 @@
 # Zone Initialization Design Document
 
+> **Cross-repo docs** — when updating this file, also check:
+> - `civic-app` → `design-docs/MVP-taxi-spatial-qa.md` — PLANNING AREAS in system prompt (§6.3) must match zone names seeded here
+> - `civic-frontend` → `docs/apis-data-contract.md` — `ZoneGeometryData` shape and `context.type = "zone"` fields reference zone categories
+> - Full index: `civic-frontend/docs/cross-repo-index.md`
+
 > **Context**: The `zones` table schema already exists (see `schema.sql`) but is empty.
 > Zone-based API endpoints (`/zone/{zoneName}/count`, `/road/{roadName}/count`) silently
 > return zero because the JOIN against `zones` finds no matching row.
