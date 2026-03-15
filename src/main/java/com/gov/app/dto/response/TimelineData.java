@@ -35,11 +35,16 @@ public final class TimelineData implements TaxiResponseData {
     @Value
     @Builder
     public static class SnapshotEntry {
+        @JsonInclude(JsonInclude.Include.NON_NULL)
+        @JsonProperty("snapshot_id")
+        Long snapshotId;
+
         OffsetDateTime timestamp;
 
         @JsonProperty("taxi_count")
         int taxiCount;
 
+        @JsonInclude(JsonInclude.Include.NON_NULL)
         GeoJsonFeatureCollection locations;
     }
 }

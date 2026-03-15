@@ -232,21 +232,16 @@ public class TaxiQueryService {
                     Mono<Long> countMono = zoneName == null
                             ? Mono.just((long) snapshot.getTaxiCount())
                             : positionRepository.countInZone(snapshot.getId(), zoneName);
-                    Flux<double[]> coordsFlux = zoneName == null
-                            ? positionRepository.listForSnapshot(snapshot.getId())
-                            : positionRepository.listInZone(snapshot.getId(), zoneName);
-                    return Mono.zip(countMono, toFeatureList(coordsFlux),
-                            (count, features) -> TimelineData.SnapshotEntry.builder()
-                                    .timestamp(snapshot.getApiTimestamp())
-                                    .taxiCount(count.intValue())
-                                    .locations(GeoJsonFeatureCollection.builder().features(features).build())
-                                    .build());
+                    return countMono.map(count -> TimelineData.SnapshotEntry.builder()
+                            .snapshotId(snapshot.getId())
+                            .timestamp(snapshot.getApiTimestamp())
+                            .taxiCount(count.intValue())
+                            .build());
                 })
                 .collectList()
                 .map(entries -> TimelineData.builder()
                         .fromTime(entries.isEmpty() ? from : entries.get(0).getTimestamp())
                         .toTime(entries.isEmpty() ? to : entries.get(entries.size() - 1).getTimestamp())
-                        .windowMinutes((int) Duration.between(from, to).toMinutes())
                         .context(context)
                         .snapshots(entries)
                         .build());
