@@ -509,7 +509,11 @@ WHERE tp.snapshot_id = :snapshotId
 
 ---
 
-### 4.7 🕐 Time Range Query
+### 4.7 🕐 Time Range Query (MVT-backed)
+
+The timeline endpoint is split into two parts: a **metadata endpoint** that returns lightweight snapshot metadata (no geometry), and a **tile endpoint** that serves each snapshot's taxi positions as Mapbox Vector Tiles (MVT). This avoids sending massive GeoJSON payloads when the time range is long.
+
+#### 4.7.1 Timeline Metadata
 
 ```
 GET /api/v1/taxis/history/snapshots
@@ -521,11 +525,11 @@ GET /api/v1/taxis/history/snapshots
 | `end` | string | ✅ | End time (SGT) |
 | `zone` | string | ❌ | Filter to a named zone |
 
-Returns per-snapshot taxi positions within the time window. Same structure as **4.8** — designed for Mapbox timeline visualisation.
+Returns snapshot metadata only — `snapshot_id`, `timestamp`, and `taxi_count` — **without** `locations`. When `zone` is provided, `taxi_count` reflects only the taxis within that zone.
 
 **Core SQL** (no zone):
 ```sql
-SELECT ts.api_timestamp, ts.taxi_count
+SELECT ts.id AS snapshot_id, ts.api_timestamp, ts.taxi_count
 FROM taxi_snapshots ts
 WHERE ts.api_timestamp BETWEEN :start AND :end
 ORDER BY ts.api_timestamp;
@@ -533,13 +537,13 @@ ORDER BY ts.api_timestamp;
 
 With optional zone filter:
 ```sql
-SELECT ts.api_timestamp, COUNT(tp.id) AS zone_taxi_count
+SELECT ts.id AS snapshot_id, ts.api_timestamp, COUNT(tp.id) AS taxi_count
 FROM taxi_snapshots ts
 JOIN taxi_positions tp ON tp.snapshot_id = ts.id
 JOIN zones z ON z.name = :zoneName
 WHERE ts.api_timestamp BETWEEN :start AND :end
   AND ST_Covers(z.geog, tp.geog)
-GROUP BY ts.api_timestamp
+GROUP BY ts.id, ts.api_timestamp
 ORDER BY ts.api_timestamp;
 ```
 
@@ -555,32 +559,79 @@ ORDER BY ts.api_timestamp;
     "to_time": "2026-02-28T09:00:00+08:00",
     "context": { "type": "zone", "zone_name": "cbd", "category": "district" },
     "snapshots": [
-      {
-        "timestamp": "2026-02-28T08:00:00+08:00",
-        "taxi_count": 3200,
-        "locations": {
-          "type": "FeatureCollection",
-          "features": [
-            { "type": "Feature", "geometry": { "type": "Point", "coordinates": [103.832, 1.304] }, "properties": null },
-            { "type": "Feature", "geometry": { "type": "Point", "coordinates": [103.851, 1.290] }, "properties": null }
-          ]
-        }
-      },
-      {
-        "timestamp": "2026-02-28T08:01:00+08:00",
-        "taxi_count": 3215,
-        "locations": {
-          "type": "FeatureCollection",
-          "features": [
-            { "type": "Feature", "geometry": { "type": "Point", "coordinates": [103.833, 1.305] }, "properties": null }
-          ]
-        }
-      }
+      { "snapshot_id": 1001, "timestamp": "2026-02-28T08:00:00+08:00", "taxi_count": 3200 },
+      { "snapshot_id": 1002, "timestamp": "2026-02-28T08:01:00+08:00", "taxi_count": 3215 }
     ]
   },
   "error": null
 }
 ```
+
+> **Note**: `snapshots[].locations` is no longer included. The frontend fetches spatial data per-snapshot via the tile endpoint (§4.7.2).
+
+#### 4.7.2 Snapshot Tile Endpoint (MVT)
+
+```
+GET /api/v1/tiles/taxis/{snapshotId}/{z}/{x}/{y}.pbf
+```
+
+| Param | Type | Source | Description |
+|-------|------|--------|-------------|
+| `snapshotId` | long | path | Snapshot ID from the metadata response |
+| `z` | int | path | Tile zoom level (0–22) |
+| `x` | int | path | Tile column index |
+| `y` | int | path | Tile row index |
+| `zone` | string | query (optional) | Filter positions to a named zone |
+
+Returns binary MVT (`application/x-protobuf`). The `z`, `x`, `y` parameters follow the standard [slippy map tile](https://wiki.openstreetmap.org/wiki/Slippy_map_tilenames) convention — Mapbox GL JS computes these automatically based on the user's viewport and zoom level.
+
+**Response headers**:
+- `Content-Type: application/x-protobuf`
+- `Cache-Control: max-age=300` (5 min — snapshot data is immutable)
+
+**Core SQL**:
+```sql
+SELECT ST_AsMVT(tile, 'taxis', 4096, 'geom') AS mvt
+FROM (
+    SELECT tp.id,
+           ST_AsMVTGeom(
+               tp.geog::geometry,
+               ST_TileEnvelope(:z, :x, :y),
+               4096, 256, true
+           ) AS geom
+    FROM taxi_positions tp
+    WHERE tp.snapshot_id = :snapshotId
+      AND ST_Intersects(
+            tp.geog::geometry,
+            ST_Transform(ST_TileEnvelope(:z, :x, :y), 4326)
+          )
+      AND (:zone IS NULL OR ST_Covers(
+            (SELECT geog::geometry FROM zones WHERE name = :zone),
+            tp.geog::geometry
+          ))
+) AS tile
+WHERE geom IS NOT NULL;
+```
+
+**Frontend usage** — Mapbox GL JS automatically requests the tiles it needs:
+```typescript
+map.addSource('timeline-taxis', {
+  type: 'vector',
+  tiles: [`${baseUrl}/tiles/taxis/${snapshotId}/{z}/{x}/{y}.pbf?zone=cbd`],
+});
+
+map.addLayer({
+  id: 'taxi-heatmap',
+  type: 'heatmap',
+  source: 'timeline-taxis',
+  'source-layer': 'taxis',
+  // ...paint properties
+});
+```
+
+When the user scrubs the timeline slider, the frontend swaps the tile source URL to point to the new `snapshotId`. Adjacent snapshots can be prefetched for smooth playback.
+
+**MVT layer name**: `taxis` (matches the second argument to `ST_AsMVT`)
 
 ---
 
@@ -691,17 +742,18 @@ Zone geometry is static — the response includes `Cache-Control: max-age=86400`
 
 ### 4.10 Endpoint Summary Table
 
-| # | Method | Path | Description |
-|---|--------|------|-------------|
-| 1 | GET | `/api/v1/taxis/nearby` | Taxis within radius (count + GeoJSON) |
-| 2 | GET | `/api/v1/taxis/nearest` | Nearest N taxis with distance |
-| 3 | GET | `/api/v1/taxis/zone/count?zoneName=` | Count in named zone |
-| 4 | POST | `/api/v1/taxis/polygon/count` | Count in custom GeoJSON polygon |
-| 5 | GET | `/api/v1/taxis/road/count?roadName=` | Count near road/highway |
-| 6 | POST | `/api/v1/taxis/route/count` | Count along a route buffer |
-| 7 | GET | `/api/v1/taxis/history/snapshots` | Time-range taxi count history |
-| 8 | GET | `/api/v1/taxis/history/recent` | Recently online taxi delta |
-| 9 | GET | `/api/v1/zones/{name}/geometry` | GeoJSON geometry of a zone/road/highway |
+| # | Method | Path | Response | Description |
+|---|--------|------|----------|-------------|
+| 1 | GET | `/api/v1/taxis/nearby` | JSON | Taxis within radius (count + GeoJSON) |
+| 2 | GET | `/api/v1/taxis/nearest` | JSON | Nearest N taxis with distance |
+| 3 | GET | `/api/v1/taxis/zone/count?zoneName=` | JSON | Count in named zone |
+| 4 | POST | `/api/v1/taxis/polygon/count` | JSON | Count in custom GeoJSON polygon |
+| 5 | GET | `/api/v1/taxis/road/count?roadName=` | JSON | Count near road/highway |
+| 6 | POST | `/api/v1/taxis/route/count` | JSON | Count along a route buffer |
+| 7 | GET | `/api/v1/taxis/history/snapshots` | JSON | Timeline metadata (snapshot IDs + counts, no geometry) |
+| 8 | GET | `/api/v1/tiles/taxis/{snapshotId}/{z}/{x}/{y}.pbf` | MVT | Taxi positions for a snapshot as vector tiles |
+| 9 | GET | `/api/v1/taxis/history/recent` | JSON | Recently online taxi delta |
+| 10 | GET | `/api/v1/zones/{name}/geometry` | JSON | GeoJSON geometry of a zone/road/highway |
 
 ---
 
@@ -718,10 +770,12 @@ com.gov.app
 │
 ├── service
 │   ├── TaxiFetchService.java         # Calls upstream API, persists snapshot
-│   └── TaxiQueryService.java         # All spatial / temporal query logic
+│   ├── TaxiQueryService.java         # All spatial / temporal query logic
+│   └── TileService.java              # Generates MVT tiles via PostGIS ST_AsMVT
 │
 ├── controller
-│   └── TaxiController.java           # REST endpoints (WebFlux @RestController)
+│   ├── TaxiController.java           # REST endpoints (WebFlux @RestController)
+│   └── TileController.java           # MVT tile endpoints (application/x-protobuf)
 │
 ├── domain
 │   └── record
@@ -753,7 +807,8 @@ com.gov.app
 │
 ├── repository
 │   ├── TaxiSnapshotRepository.java   # ReactiveCrudRepository
-│   └── TaxiPositionRepository.java   # Custom @Query with PostGIS functions
+│   ├── TaxiPositionRepository.java   # Custom @Query with PostGIS functions
+│   └── TileRepository.java           # MVT tile generation queries (ST_AsMVT)
 │
 └── exception
     ├── BusinessException.java
@@ -799,7 +854,31 @@ INSERT INTO taxi_positions (snapshot_id, api_timestamp, longitude, latitude)
 SELECT :snapshotId, :apiTimestamp, unnest(:lons::float8[]), unnest(:lats::float8[])
 ```
 
-### 6.4 Zone Data Seeding
+### 6.4 MVT Tile Generation via R2DBC
+
+`ST_AsMVT` returns `bytea` from PostGIS. With R2DBC, the result is mapped to `ByteBuffer`:
+
+```java
+public Mono<byte[]> fetchTile(long snapshotId, int z, int x, int y, String zone) {
+    return client.sql(TILE_SQL)
+        .bind("snapshotId", snapshotId)
+        .bind("z", z).bind("x", x).bind("y", y)
+        .bind("zone", zone)  // null when unfiltered
+        .map(row -> {
+            ByteBuffer buf = row.get("mvt", ByteBuffer.class);
+            if (buf == null) return new byte[0];
+            byte[] bytes = new byte[buf.remaining()];
+            buf.get(bytes);
+            return bytes;
+        })
+        .one()
+        .defaultIfEmpty(new byte[0]);
+}
+```
+
+Tiles are immutable per snapshot, so responses include `Cache-Control: max-age=300` to enable browser and CDN caching.
+
+### 6.5 Zone Data Seeding
 
 Pre-load Singapore zones/roads from publicly available GeoJSON sources (e.g. OneMap, OSM) into the `zones` table via a `DataInitializer` component on startup.
 
