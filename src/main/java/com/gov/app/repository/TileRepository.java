@@ -21,7 +21,7 @@ public class TileRepository {
             FROM (
                 SELECT tp.id,
                        ST_AsMVTGeom(
-                           tp.geog::geometry,
+                           ST_Transform(tp.geog::geometry, 3857),
                            ST_TileEnvelope(:z, :x, :y),
                            4096, 256, true
                        ) AS geom
@@ -44,7 +44,7 @@ public class TileRepository {
             FROM (
                 SELECT tp.id,
                        ST_AsMVTGeom(
-                           tp.geog::geometry,
+                           ST_Transform(tp.geog::geometry, 3857),
                            ST_TileEnvelope(:z, :x, :y),
                            4096, 256, true
                        ) AS geom

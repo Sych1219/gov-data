@@ -569,21 +569,23 @@ ORDER BY ts.api_timestamp;
 
 > **Note**: `snapshots[].locations` is no longer included. The frontend fetches spatial data per-snapshot via the tile endpoint (§4.7.2).
 
-#### 4.7.2 Snapshot Tile Endpoint (MVT)
+#### 4.7.2 Batched Timeline Tile Endpoint (MVT)
 
 ```
-GET /api/v1/tiles/taxis/{snapshotId}/{z}/{x}/{y}.pbf
+GET /api/v1/tiles/taxis/timeline/{z}/{x}/{y}.pbf
 ```
 
 | Param | Type | Source | Description |
 |-------|------|--------|-------------|
-| `snapshotId` | long | path | Snapshot ID from the metadata response |
 | `z` | int | path | Tile zoom level (0–22) |
 | `x` | int | path | Tile column index |
 | `y` | int | path | Tile row index |
+| `snapshots` | string | query (**required**) | Comma-separated snapshot IDs from the metadata response (e.g. `7184,7194,7204`) |
 | `zone` | string | query (optional) | Filter positions to a named zone |
 
-Returns binary MVT (`application/x-protobuf`). The `z`, `x`, `y` parameters follow the standard [slippy map tile](https://wiki.openstreetmap.org/wiki/Slippy_map_tilenames) convention — Mapbox GL JS computes these automatically based on the user's viewport and zoom level.
+Returns a **single** MVT tile containing taxi positions from **all** requested snapshots. Each MVT feature carries a `snapshot_id` property so the frontend can filter client-side — **no per-frame network request is needed during playback**.
+
+**Why batched?** The previous per-snapshot tile design required a new tile request on every playback frame. At 600 ms intervals, tiles rarely finished loading before the next frame arrived, causing Mapbox to abort in-flight requests and producing stuttery or blank playback. Batching all snapshots into one tile eliminates this: the frontend loads tiles once, then switches frames instantly via a Mapbox `filter` expression.
 
 **Response headers**:
 - `Content-Type: application/x-protobuf`
@@ -594,13 +596,14 @@ Returns binary MVT (`application/x-protobuf`). The `z`, `x`, `y` parameters foll
 SELECT ST_AsMVT(tile, 'taxis', 4096, 'geom') AS mvt
 FROM (
     SELECT tp.id,
+           tp.snapshot_id,
            ST_AsMVTGeom(
-               tp.geog::geometry,
+               ST_Transform(tp.geog::geometry, 3857),
                ST_TileEnvelope(:z, :x, :y),
                4096, 256, true
            ) AS geom
     FROM taxi_positions tp
-    WHERE tp.snapshot_id = :snapshotId
+    WHERE tp.snapshot_id = ANY(:snapshotIds)
       AND ST_Intersects(
             tp.geog::geometry,
             ST_Transform(ST_TileEnvelope(:z, :x, :y), 4326)
@@ -613,25 +616,41 @@ FROM (
 WHERE geom IS NOT NULL;
 ```
 
-**Frontend usage** — Mapbox GL JS automatically requests the tiles it needs:
+Key differences from a per-snapshot query:
+- `tp.snapshot_id` is **included as an MVT feature property** (the `snapshot_id` column is selected alongside `geom`)
+- `WHERE tp.snapshot_id = ANY(:snapshotIds)` accepts an array of IDs instead of a single value
+- `ST_Transform(tp.geog::geometry, 3857)` ensures the geometry SRID matches `ST_TileEnvelope` (SRID 3857)
+
+**Tile size considerations**: For a zone like Punggol with ~45 taxis and 31 snapshots over 8 hours, a tile contains ~1 400 features (~50–80 KB compressed). For city-wide queries with 8 000 taxis × 31 snapshots = ~248 000 features, tiles at lower zoom levels could be large. Mitigation: the frontend should cap the number of snapshot IDs sent per request (e.g. max 60) and batch into multiple requests if needed.
+
+**Frontend usage** — the source is added **once**; playback switches frames via a `filter`:
 ```typescript
+// Add source once with all snapshot IDs
 map.addSource('timeline-taxis', {
   type: 'vector',
-  tiles: [`${baseUrl}/tiles/taxis/${snapshotId}/{z}/{x}/{y}.pbf?zone=cbd`],
+  tiles: [`${baseUrl}/tiles/taxis/timeline/{z}/{x}/{y}.pbf?snapshots=7184,7194,7204&zone=cbd`],
 });
 
 map.addLayer({
-  id: 'taxi-heatmap',
-  type: 'heatmap',
+  id: 'taxi-points',
+  type: 'circle',
   source: 'timeline-taxis',
   'source-layer': 'taxis',
-  // ...paint properties
+  filter: ['==', ['get', 'snapshot_id'], 7184],  // show first snapshot
+  paint: { 'circle-color': '#11b4da', 'circle-radius': 6 },
 });
+
+// On playback tick — instant, no network request:
+map.setFilter('taxi-points', ['==', ['get', 'snapshot_id'], 7194]);
 ```
 
-When the user scrubs the timeline slider, the frontend swaps the tile source URL to point to the new `snapshotId`. Adjacent snapshots can be prefetched for smooth playback.
-
 **MVT layer name**: `taxis` (matches the second argument to `ST_AsMVT`)
+
+**MVT feature properties**:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `snapshot_id` | long | The snapshot this position belongs to — used by the frontend `filter` expression |
 
 ---
 
@@ -751,7 +770,7 @@ Zone geometry is static — the response includes `Cache-Control: max-age=86400`
 | 5 | GET | `/api/v1/taxis/road/count?roadName=` | JSON | Count near road/highway |
 | 6 | POST | `/api/v1/taxis/route/count` | JSON | Count along a route buffer |
 | 7 | GET | `/api/v1/taxis/history/snapshots` | JSON | Timeline metadata (snapshot IDs + counts, no geometry) |
-| 8 | GET | `/api/v1/tiles/taxis/{snapshotId}/{z}/{x}/{y}.pbf` | MVT | Taxi positions for a snapshot as vector tiles |
+| 8 | GET | `/api/v1/tiles/taxis/timeline/{z}/{x}/{y}.pbf?snapshots=` | MVT | Batched taxi positions for multiple snapshots as vector tiles (features carry `snapshot_id` property) |
 | 9 | GET | `/api/v1/taxis/history/recent` | JSON | Recently online taxi delta |
 | 10 | GET | `/api/v1/zones/{name}/geometry` | JSON | GeoJSON geometry of a zone/road/highway |
 
@@ -856,12 +875,14 @@ SELECT :snapshotId, :apiTimestamp, unnest(:lons::float8[]), unnest(:lats::float8
 
 ### 6.4 MVT Tile Generation via R2DBC
 
-`ST_AsMVT` returns `bytea` from PostGIS. With R2DBC, the result is mapped to `ByteBuffer`:
+`ST_AsMVT` returns `bytea` from PostGIS. With R2DBC, the result is mapped to `ByteBuffer`.
+
+The batched timeline tile endpoint accepts an array of snapshot IDs and includes `snapshot_id` as an MVT feature property:
 
 ```java
-public Mono<byte[]> fetchTile(long snapshotId, int z, int x, int y, String zone) {
-    return client.sql(TILE_SQL)
-        .bind("snapshotId", snapshotId)
+public Mono<byte[]> fetchTimelineTile(long[] snapshotIds, int z, int x, int y, String zone) {
+    return client.sql(TIMELINE_TILE_SQL)
+        .bind("snapshotIds", snapshotIds)
         .bind("z", z).bind("x", x).bind("y", y)
         .bind("zone", zone)  // null when unfiltered
         .map(row -> {
