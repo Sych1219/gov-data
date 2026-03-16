@@ -59,9 +59,21 @@ public class GlobalExceptionHandler {
         return error(HttpStatus.BAD_GATEWAY, "UPSTREAM_ERROR", ex.getMessage(), null);
     }
 
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<ApiResponse<Void>> handleIllegalArgument(IllegalArgumentException ex) {
+        log.warn("Illegal argument: {}", ex.getMessage());
+        return error(HttpStatus.BAD_REQUEST, "BAD_REQUEST", ex.getMessage(), null);
+    }
+
+    @ExceptionHandler(NumberFormatException.class)
+    public ResponseEntity<ApiResponse<Void>> handleNumberFormat(NumberFormatException ex) {
+        log.warn("Number format error: {}", ex.getMessage());
+        return error(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "Invalid number format: " + ex.getMessage(), null);
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Void>> handleGeneric(Exception ex) {
-        log.error("Unhandled exception", ex);
+        log.error("Unhandled {} — {}", ex.getClass().getSimpleName(), ex.getMessage(), ex);
         return error(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_ERROR", "An unexpected error occurred", null);
     }
 
