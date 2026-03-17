@@ -1,0 +1,178 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Data.gov.sg APIs",
+    "description": "\"APIs for People\"",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "https://api.data.gov.sg/v1"
+    }
+  ],
+  "paths": {
+    "/transport/traffic-images": {
+      "get": {
+        "summary": "Get the latest images from traffic cameras all around Singapore",
+        "description": "- Retrieved every 20 seconds from LTA's Datamall\n- Locations of the cameras are also provided in the response\n- We recommend that this endpoint be called every minute\n- Use the `date_time` parameter to retrieve the latest available data at that moment in time.\n",
+        "tags": ["Transport"],
+        "parameters": [
+          {
+            "name": "date_time",
+            "in": "query",
+            "description": "YYYY-MM-DD[T]HH:mm:ss (SGT)",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+    "name": "x-api-key",
+    "in": "header",
+    "description": "API key for higher rate limits (optional)",
+    "required": false,
+    "schema": {
+      "type": "string"
+    }
+  }
+        ],
+        "responses": {
+          "200": {
+            "description": "Traffic Image Information",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "api_info": {
+                      "$ref": "#/components/schemas/ApiInfo"
+                    },
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/TrafficImages"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ApiInfo": {
+        "type": "object",
+        "description": "Contains information about the API (from Data.gov.sg)",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": ["healthy"]
+          }
+        }
+      },
+      "TrafficImages": {
+        "type": "object",
+        "required": ["timestamp", "cameras"],
+        "properties": {
+          "timestamp": {
+            "type": "string",
+            "description": "Time of acquisition of data from LTA's Datamall",
+            "format": "date-time"
+          },
+          "cameras": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "description": "Camera information and images",
+              "required": [
+                "timestamp",
+                "camera_id",
+                "image_id",
+                "image",
+                "image_metadata"
+              ],
+              "properties": {
+                "timestamp": {
+                  "type": "string",
+                  "description": "Time of image",
+                  "format": "date-time"
+                },
+                "camera_id": {
+                  "type": "number",
+                  "description": "Camera ID provided by LTA"
+                },
+                "image_id": {
+                  "type": "number",
+                  "description": "Image ID provided by LTA"
+                },
+                "image": {
+                  "type": "string",
+                  "description": "URL of image"
+                },
+                "image_metadata": {
+                  "type": "object",
+                  "description": "Metadata of the image file",
+                  "required": ["height", "width", "md5"],
+                  "properties": {
+                    "height": {
+                      "type": "number",
+                      "description": "Height of the image (pixels)"
+                    },
+                    "width": {
+                      "type": "number",
+                      "description": "Width of the image (pixels)"
+                    },
+                    "md5": {
+                      "type": "string",
+                      "description": "MD5 hash of image file"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "required": ["code", "message"],
+        "properties": {
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "responses": {
+      "Error": {
+        "description": "Error information",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+    "ApiKeyAuth": {
+      "type": "apiKey",
+      "in": "header",
+      "name": "x-api-key"
+    }
+    
+  }
+  }
+}
