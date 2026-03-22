@@ -6,7 +6,7 @@ Every day, Singapore commuters ask questions that no existing app can answer:
 
 > "May I know if the Causeway queue looks long — but **how bad is it really**? Is it backed up to the highway?"
 >
-> "Whether there's an accident on PIE — but **has it been cleared yet**? Should I still avoid it?"
+> "I heard there's an accident on PIE — but **has it been cleared yet**? Should I still avoid it?"
 >
 > "It's pouring rain — **is there flooding** on my route through Tampines?"
 >
@@ -214,7 +214,7 @@ public class TrafficDataScheduler {
 | Tampines Expressway | TPE | 7791, 7793, 7794, 7795, 7796, 7797, 7798 | 7 |
 | Seletar Expressway | SLE | 9701, 9702, 9703, 9704, 9705, 9706 | 6 |
 | Kranji Expressway | KJE | 8701, 8702, 8704, 8706 | 4 |
-| Ayer Rajah Expressway | AYE | 4798, 4799, 1704, 1707 | 4 |
+| Ayer Rajah Expressway | AYE | 1801, 1802, 4798, 4799 | 4 |
 | Kallang-Paya Lebar Expy | KPE | 3793, 3795, 3796, 3797, 3798, 5794, 5795, 5797, 5798, 5799 | 10 |
 
 ---
