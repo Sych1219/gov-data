@@ -65,3 +65,32 @@ CREATE INDEX IF NOT EXISTS idx_zones_name_trgm
 
 CREATE INDEX IF NOT EXISTS idx_zones_geog
     ON zones USING GIST (geog);
+
+-- ── Traffic cameras (static registry) ────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS cameras (
+    id              BIGSERIAL PRIMARY KEY,
+    camera_id       BIGINT NOT NULL UNIQUE,
+    latitude        DECIMAL(12, 8) NOT NULL,
+    longitude       DECIMAL(12, 8) NOT NULL,
+    location_name   VARCHAR(255),
+    expressway      VARCHAR(50),
+    resolution      VARCHAR(20),
+    first_seen_at   TIMESTAMPTZ,
+    last_seen_at    TIMESTAMPTZ
+);
+
+-- ── Camera snapshots (latest image per camera) ──────────────────────────────
+CREATE TABLE IF NOT EXISTS camera_snapshots (
+    id              BIGSERIAL PRIMARY KEY,
+    camera_id       BIGINT NOT NULL REFERENCES cameras(camera_id),
+    timestamp       TIMESTAMPTZ NOT NULL,
+    image_url       TEXT NOT NULL,
+    image_md5       VARCHAR(32) NOT NULL,
+    image_width     INT,
+    image_height    INT,
+    created_at      TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE (camera_id, timestamp)
+);
+
+CREATE INDEX IF NOT EXISTS idx_snapshots_camera_time
+    ON camera_snapshots (camera_id, timestamp DESC);

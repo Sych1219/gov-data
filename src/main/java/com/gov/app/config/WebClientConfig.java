@@ -15,6 +15,9 @@ public class WebClientConfig {
     @Value("${gov-api.taxi.api-key:}")
     private String apiKey;
 
+    @Value("${gov-api.traffic-image.base-url}")
+    private String trafficImageBaseUrl;
+
     @Bean
     public WebClient taxiWebClient(WebClient.Builder builder) {
         WebClient.Builder b = builder.baseUrl(baseUrl);
@@ -22,5 +25,10 @@ public class WebClientConfig {
             b = b.defaultHeader("x-api-key", apiKey);
         }
         return b.build();
+    }
+
+    @Bean
+    public WebClient trafficImageWebClient(WebClient.Builder builder) {
+        return builder.baseUrl(trafficImageBaseUrl).build();
     }
 }

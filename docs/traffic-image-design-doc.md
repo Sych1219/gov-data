@@ -89,14 +89,15 @@ GET https://api.data.gov.sg/v1/transport/traffic-images?date_time={YYYY-MM-DDTHH
 
 ```sql
 CREATE TABLE cameras (
-    camera_id       VARCHAR(10) PRIMARY KEY,
+    id              BIGSERIAL PRIMARY KEY,
+    camera_id       BIGINT NOT NULL UNIQUE,
     latitude        DECIMAL(12, 8) NOT NULL,
     longitude       DECIMAL(12, 8) NOT NULL,
     location_name   VARCHAR(255),          -- reverse-geocoded or from static mapping
     expressway      VARCHAR(50),           -- e.g., "BKE", "PIE", "CTE"
     resolution      VARCHAR(20),           -- "HD", "SD"
-    first_seen_at   TIMESTAMP,
-    last_seen_at    TIMESTAMP
+    first_seen_at   TIMESTAMPTZ,
+    last_seen_at    TIMESTAMPTZ
 );
 ```
 
@@ -109,13 +110,13 @@ For MVP, we only keep the **latest snapshot per camera** (hot tier only). No his
 ```sql
 CREATE TABLE camera_snapshots (
     id              BIGSERIAL PRIMARY KEY,
-    camera_id       VARCHAR(10) NOT NULL REFERENCES cameras(camera_id),
-    timestamp       TIMESTAMP NOT NULL,
+    camera_id       BIGINT NOT NULL REFERENCES cameras(camera_id),
+    timestamp       TIMESTAMPTZ NOT NULL,
     image_url       TEXT NOT NULL,
     image_md5       VARCHAR(32) NOT NULL,
     image_width     INT,
     image_height    INT,
-    created_at      TIMESTAMP DEFAULT NOW(),
+    created_at      TIMESTAMPTZ DEFAULT NOW(),
 
     UNIQUE (camera_id, timestamp)
 );
