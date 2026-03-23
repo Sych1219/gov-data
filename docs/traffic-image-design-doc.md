@@ -2,21 +2,23 @@
 
 ## Background
 
-Every day, Singapore commuters ask questions that no existing app can answer:
+Traffic administrators and government agencies monitor Singapore's road network daily, but lack efficient tools to answer operational questions in real time:
 
-> "May I know if the Causeway queue looks long — but **how bad is it really**? Is it backed up to the highway?"
+> "Among all monitored cameras, **where is congestion worst** right now?"
 >
-> "I heard there's an accident on PIE — but **has it been cleared yet**? Should I still avoid it?"
+> "Which cameras are showing **abnormal traffic flow**?"
 >
-> "It's pouring rain — **is there flooding** on my route through Tampines?"
+> "Is traffic across the monitored area **operating normally**?"
 >
-> "CTE is red on the map — but **is traffic completely stuck, or just slow**?"
+> "**Show me all the cameras** on the map."
+>
+> "Give me a **summary of CTE traffic** — is it clear or congested along the whole corridor?"
 
-Google Maps and Waze show colored lines and icons. They tell you *that* there's congestion, but not *what it actually looks like*. They can't show you the scene, interpret what's happening, or give you a judgment call.
+Existing dashboards display camera feeds as a grid of images — operators must visually scan dozens of screens to identify problems. There is no automated triage, no cross-camera summarization (e.g., analyzing all 9 CTE cameras together to produce a single corridor-level assessment like "clear from Ang Mo Kio to Braddell, congested near Moulmein exit"), and no way to quickly answer "where should I focus attention right now?"
 
-Singapore's government publishes real-time traffic camera images — ~87 cameras, refreshed every 20 seconds — but the raw data is just a list of image URLs and GPS coordinates. No context, no analysis, no way for a commuter to quickly check "is my route okay?"
+Singapore's government publishes real-time traffic camera images — ~87 cameras, refreshed every 20 seconds — but the raw data is just a list of image URLs and GPS coordinates. No context, no analysis, no way for an operator to get an at-a-glance situational overview.
 
-**This service bridges that gap.** It ingests the camera feeds, lets users ask questions in natural language, and uses LLM vision (Claude) to actually *read* the camera images and answer: "CTE is jammed from Braddell to AMK — take PIE instead."
+**This service bridges that gap.** It ingests the camera feeds, lets administrators ask questions in natural language, and uses LLM vision (Claude) to analyze camera images across the network — surfacing congestion hotspots, flagging anomalies, and providing an overall traffic health assessment.
 
 ---
 
@@ -26,8 +28,8 @@ Singapore's government publishes real-time traffic camera images — ~87 cameras
 
 1. **Ingest** — Poll the government API every 20s, store camera metadata and snapshots in PostgreSQL
 2. **Serve** — Expose REST APIs to query cameras by expressway, location, or proximity
-3. **Analyze** — On user query, use LLM vision to read camera images and return a natural language assessment
-4. **Display** — Chat-driven frontend shows camera images and LLM analysis (see `civic-frontend` → `docs/traffic-camera-ui-design.md`)
+3. **Analyze** — On operator query, use LLM vision to read camera images across the network, identify congestion hotspots, flag abnormal traffic flow, and provide an overall situational assessment
+4. **Display** — Operator dashboard with camera overview and LLM-driven traffic analysis (see `civic-frontend` → `docs/traffic-camera-ui-design.md`)
 
 ### What MVP Does NOT Do
 
@@ -37,7 +39,6 @@ These are deferred to future iterations:
 |---------|-------------|
 | Anomaly detection & alerts | Requires background LLM monitoring — high token cost, complex |
 | Historical replay & timelapse | Needs warm/cold storage tiers — adds operational complexity |
-| Personalized commute profiles | Needs user accounts, saved routes, scheduled briefings |
 | Historical pattern analysis | Needs weeks of accumulated vision data to be meaningful |
 | Multi-source fusion (camera + taxi) | Cross-service integration, can layer on later |
 | WebSocket real-time push | Polling is fine for MVP |
@@ -362,16 +363,13 @@ Returns cameras matching a location name search.
 See `civic-frontend` → `docs/traffic-camera-ui-design.md` for detailed wireframes and component design.
 
 **MVP views:**
-- Camera map (all cameras on Mapbox)
-- Corridor view (cameras along an expressway with LLM summary)
-- Camera detail (single camera image + LLM analysis)
+- Network overview map (all cameras on Mapbox with status indicators)
+- Corridor view (cameras along an expressway with LLM traffic summary)
+- Camera detail (single camera image + LLM situational analysis)
 
 ---
 
 ## 8. Non-Goals
-
-- Route planning or navigation (use Google Maps)
-- ETA calculation (use Google Maps)
 - Background LLM monitoring (deferred — MVP is on-demand only)
 
 ---
@@ -384,7 +382,7 @@ Features to add after MVP is validated:
 |---------|-------------|-------------|
 | **Historical replay** | Store 7 days of snapshots, timelapse playback | Warm storage tier, purge scheduler |
 | **Anomaly alerts** | Detect offline/frozen cameras, push alerts | `camera_alerts` table, WebSocket, background scheduler |
-| **Commute profiles** | Save routes, daily departure briefings | User accounts, `commute_profiles` table |
-| **Historical patterns** | "Is PIE always bad on Fridays?" | Weeks of accumulated vision data, `historical_patterns` table |
+| **Operator watchlists** | Save camera groups, scheduled summary reports | User accounts, `operator_watchlists` table |
+| **Historical patterns** | "Is PIE consistently congested on Friday evenings?" | Weeks of accumulated vision data, `historical_patterns` table |
 | **Camera + taxi fusion** | Combine traffic cameras with taxi availability | Cross-service API integration |
 | **Proactive LLM monitoring** | Background vision analysis, auto-alerts | Higher token budget, rate limiting |
