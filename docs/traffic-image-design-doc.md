@@ -177,7 +177,106 @@ public class TrafficDataScheduler {
 | GET | `/api/cameras/expressway/{code}` | All cameras along an expressway (`{code}` = expressway code, e.g., `BKE`, `PIE`, `CTE` — see Section 6) |
 | GET | `/api/cameras/search?q=` | Search by location name (`q` = search keyword, e.g., `Woodlands`, `Tampines`) |
 
-### Example Response: GET `/api/cameras/expressway/BKE`
+### Response Definitions
+
+#### GET `/api/cameras`
+
+Returns all cameras with their latest snapshot.
+
+```json
+{
+  "cameras": [
+    {
+      "camera_id": "2701",
+      "location_name": "BKE - Woodlands",
+      "latitude": 1.4470,
+      "longitude": 103.7717,
+      "latest_image": "https://images.data.gov.sg/api/traffic-images/...",
+      "timestamp": "2026-03-17T11:56:21+08:00",
+      "resolution": "1920x1080"
+    }
+  ]
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `cameras` | `CameraDetail[]` | Array of all cameras with latest snapshot |
+| `cameras[].camera_id` | `string` | Unique camera identifier (e.g., `2701`) |
+| `cameras[].location_name` | `string?` | Human-readable location name, null if not mapped |
+| `cameras[].latitude` | `number` | GPS latitude |
+| `cameras[].longitude` | `number` | GPS longitude |
+| `cameras[].latest_image` | `string` | URL of the latest snapshot image |
+| `cameras[].timestamp` | `string` | ISO 8601 timestamp of the snapshot |
+| `cameras[].resolution` | `string` | Image resolution (e.g., `1920x1080`) |
+
+---
+
+#### GET `/api/cameras/{id}`
+
+Returns a single camera's detail with its latest image.
+
+```json
+{
+  "camera_id": "2701",
+  "location_name": "BKE - Woodlands",
+  "latitude": 1.4470,
+  "longitude": 103.7717,
+  "latest_image": "https://images.data.gov.sg/api/traffic-images/...",
+  "timestamp": "2026-03-17T11:56:21+08:00",
+  "resolution": "1920x1080"
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `camera_id` | `string` | Unique camera identifier |
+| `location_name` | `string?` | Human-readable location name |
+| `latitude` | `number` | GPS latitude |
+| `longitude` | `number` | GPS longitude |
+| `latest_image` | `string` | URL of the latest snapshot image |
+| `timestamp` | `string` | ISO 8601 timestamp of the snapshot |
+| `resolution` | `string` | Image resolution |
+
+**Error:** Returns `404` if camera_id does not exist.
+
+---
+
+#### GET `/api/cameras/nearby?lat=&lng=&radius=`
+
+Returns cameras within the specified radius of a GPS point.
+
+```json
+{
+  "lat": 1.3521,
+  "lng": 103.8198,
+  "radius": 3000,
+  "cameras": [
+    {
+      "camera_id": "1701",
+      "location_name": "CTE - Moulmein",
+      "latitude": 1.3553,
+      "longitude": 103.8400,
+      "latest_image": "https://images.data.gov.sg/api/traffic-images/...",
+      "timestamp": "2026-03-17T11:56:21+08:00",
+      "resolution": "1920x1080"
+    }
+  ]
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `lat` | `number` | The queried latitude |
+| `lng` | `number` | The queried longitude |
+| `radius` | `number` | The queried radius in meters |
+| `cameras` | `CameraDetail[]` | Cameras within the radius, sorted by distance (nearest first) |
+
+---
+
+#### GET `/api/cameras/expressway/{code}`
+
+Returns all cameras along an expressway.
 
 ```json
 {
@@ -191,13 +290,51 @@ public class TrafficDataScheduler {
       "location_name": "BKE - Woodlands",
       "latitude": 1.4470,
       "longitude": 103.7717,
-      "latest_image": "https://...",
+      "latest_image": "https://images.data.gov.sg/api/traffic-images/...",
       "timestamp": "2026-03-17T11:56:21+08:00",
       "resolution": "1920x1080"
     }
   ]
 }
 ```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `expressway` | `string` | Expressway code (e.g., `BKE`) |
+| `name` | `string` | Full expressway name |
+| `cameras_online` | `integer` | Number of cameras with a recent snapshot |
+| `cameras_total` | `integer` | Total cameras mapped to this expressway |
+| `cameras` | `CameraDetail[]` | Array of cameras along the expressway |
+
+**Error:** Returns `404` if expressway code is not recognized.
+
+---
+
+#### GET `/api/cameras/search?q=`
+
+Returns cameras matching a location name search.
+
+```json
+{
+  "query": "Woodlands",
+  "cameras": [
+    {
+      "camera_id": "2701",
+      "location_name": "BKE - Woodlands",
+      "latitude": 1.4470,
+      "longitude": 103.7717,
+      "latest_image": "https://images.data.gov.sg/api/traffic-images/...",
+      "timestamp": "2026-03-17T11:56:21+08:00",
+      "resolution": "1920x1080"
+    }
+  ]
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `query` | `string` | The search keyword used |
+| `cameras` | `CameraDetail[]` | Cameras with location names matching the query (case-insensitive partial match) |
 
 ---
 
