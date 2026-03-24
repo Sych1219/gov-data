@@ -187,30 +187,34 @@ Returns all cameras with their latest snapshot.
 
 ```json
 {
-  "cameras": [
-    {
-      "camera_id": "2701",
-      "location_name": "BKE - Woodlands",
-      "latitude": 1.4470,
-      "longitude": 103.7717,
-      "latest_image": "https://images.data.gov.sg/api/traffic-images/...",
-      "timestamp": "2026-03-17T11:56:21+08:00",
-      "resolution": "1920x1080"
-    }
-  ]
+  "success": true,
+  "data": {
+    "cameras": [
+      {
+        "cameraId": 2701,
+        "locationName": "BKE - Woodlands",
+        "latitude": 1.4470,
+        "longitude": 103.7717,
+        "latestImage": "https://images.data.gov.sg/api/traffic-images/...",
+        "timestamp": "2026-03-17T11:56:21+08:00",
+        "resolution": "1920x1080"
+      }
+    ]
+  }
 }
 ```
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `cameras` | `CameraDetail[]` | Array of all cameras with latest snapshot |
-| `cameras[].camera_id` | `string` | Unique camera identifier (e.g., `2701`) |
-| `cameras[].location_name` | `string?` | Human-readable location name, null if not mapped |
-| `cameras[].latitude` | `number` | GPS latitude |
-| `cameras[].longitude` | `number` | GPS longitude |
-| `cameras[].latest_image` | `string` | URL of the latest snapshot image |
-| `cameras[].timestamp` | `string` | ISO 8601 timestamp of the snapshot |
-| `cameras[].resolution` | `string` | Image resolution (e.g., `1920x1080`) |
+| `success` | `boolean` | `true` on success |
+| `data.cameras` | `CameraDetail[]` | Array of all cameras with latest snapshot |
+| `data.cameras[].cameraId` | `number` | Unique camera identifier (e.g., `2701`) |
+| `data.cameras[].locationName` | `string?` | Human-readable location name, null if not mapped |
+| `data.cameras[].latitude` | `number` | GPS latitude |
+| `data.cameras[].longitude` | `number` | GPS longitude |
+| `data.cameras[].latestImage` | `string` | URL of the latest snapshot image |
+| `data.cameras[].timestamp` | `string` | ISO 8601 timestamp of the snapshot |
+| `data.cameras[].resolution` | `string` | Image resolution (e.g., `1920x1080`) |
 
 ---
 
@@ -220,25 +224,29 @@ Returns a single camera's detail with its latest image.
 
 ```json
 {
-  "camera_id": "2701",
-  "location_name": "BKE - Woodlands",
-  "latitude": 1.4470,
-  "longitude": 103.7717,
-  "latest_image": "https://images.data.gov.sg/api/traffic-images/...",
-  "timestamp": "2026-03-17T11:56:21+08:00",
-  "resolution": "1920x1080"
+  "success": true,
+  "data": {
+    "cameraId": 2701,
+    "locationName": "BKE - Woodlands",
+    "latitude": 1.4470,
+    "longitude": 103.7717,
+    "latestImage": "https://images.data.gov.sg/api/traffic-images/...",
+    "timestamp": "2026-03-17T11:56:21+08:00",
+    "resolution": "1920x1080"
+  }
 }
 ```
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `camera_id` | `string` | Unique camera identifier |
-| `location_name` | `string?` | Human-readable location name |
-| `latitude` | `number` | GPS latitude |
-| `longitude` | `number` | GPS longitude |
-| `latest_image` | `string` | URL of the latest snapshot image |
-| `timestamp` | `string` | ISO 8601 timestamp of the snapshot |
-| `resolution` | `string` | Image resolution |
+| `success` | `boolean` | `true` on success |
+| `data.cameraId` | `number` | Unique camera identifier |
+| `data.locationName` | `string?` | Human-readable location name |
+| `data.latitude` | `number` | GPS latitude |
+| `data.longitude` | `number` | GPS longitude |
+| `data.latestImage` | `string` | URL of the latest snapshot image |
+| `data.timestamp` | `string` | ISO 8601 timestamp of the snapshot |
+| `data.resolution` | `string` | Image resolution |
 
 **Error:** Returns `404` if camera_id does not exist.
 
@@ -250,29 +258,33 @@ Returns cameras within the specified radius of a GPS point.
 
 ```json
 {
-  "lat": 1.3521,
-  "lng": 103.8198,
-  "radius": 3000,
-  "cameras": [
-    {
-      "camera_id": "1701",
-      "location_name": "CTE - Moulmein",
-      "latitude": 1.3553,
-      "longitude": 103.8400,
-      "latest_image": "https://images.data.gov.sg/api/traffic-images/...",
-      "timestamp": "2026-03-17T11:56:21+08:00",
-      "resolution": "1920x1080"
-    }
-  ]
+  "success": true,
+  "data": {
+    "lat": 1.3521,
+    "lng": 103.8198,
+    "radius": 3000,
+    "cameras": [
+      {
+        "cameraId": 1701,
+        "locationName": "CTE - Moulmein",
+        "latitude": 1.3553,
+        "longitude": 103.8400,
+        "latestImage": "https://images.data.gov.sg/api/traffic-images/...",
+        "timestamp": "2026-03-17T11:56:21+08:00",
+        "resolution": "1920x1080"
+      }
+    ]
+  }
 }
 ```
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `lat` | `number` | The queried latitude |
-| `lng` | `number` | The queried longitude |
-| `radius` | `number` | The queried radius in meters |
-| `cameras` | `CameraDetail[]` | Cameras within the radius, sorted by distance (nearest first) |
+| `success` | `boolean` | `true` on success |
+| `data.lat` | `number` | The queried latitude |
+| `data.lng` | `number` | The queried longitude |
+| `data.radius` | `number` | The queried radius in meters |
+| `data.cameras` | `CameraDetail[]` | Cameras within the radius, sorted by distance (nearest first) |
 
 ---
 
@@ -282,31 +294,35 @@ Returns all cameras along an expressway.
 
 ```json
 {
-  "expressway": "BKE",
-  "name": "Bukit Timah Expressway",
-  "cameras_online": 7,
-  "cameras_total": 8,
-  "cameras": [
-    {
-      "camera_id": "2701",
-      "location_name": "BKE - Woodlands",
-      "latitude": 1.4470,
-      "longitude": 103.7717,
-      "latest_image": "https://images.data.gov.sg/api/traffic-images/...",
-      "timestamp": "2026-03-17T11:56:21+08:00",
-      "resolution": "1920x1080"
-    }
-  ]
+  "success": true,
+  "data": {
+    "expressway": "BKE",
+    "name": "Bukit Timah Expressway",
+    "camerasOnline": 7,
+    "camerasTotal": 8,
+    "cameras": [
+      {
+        "cameraId": 2701,
+        "locationName": "BKE - Woodlands",
+        "latitude": 1.4470,
+        "longitude": 103.7717,
+        "latestImage": "https://images.data.gov.sg/api/traffic-images/...",
+        "timestamp": "2026-03-17T11:56:21+08:00",
+        "resolution": "1920x1080"
+      }
+    ]
+  }
 }
 ```
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `expressway` | `string` | Expressway code (e.g., `BKE`) |
-| `name` | `string` | Full expressway name |
-| `cameras_online` | `integer` | Number of cameras with a recent snapshot |
-| `cameras_total` | `integer` | Total cameras mapped to this expressway |
-| `cameras` | `CameraDetail[]` | Array of cameras along the expressway |
+| `success` | `boolean` | `true` on success |
+| `data.expressway` | `string` | Expressway code (e.g., `BKE`) |
+| `data.name` | `string` | Full expressway name |
+| `data.camerasOnline` | `integer` | Number of cameras with a recent snapshot |
+| `data.camerasTotal` | `integer` | Total cameras mapped to this expressway |
+| `data.cameras` | `CameraDetail[]` | Array of cameras along the expressway |
 
 **Error:** Returns `404` if expressway code is not recognized.
 
@@ -318,25 +334,29 @@ Returns cameras matching a location name search.
 
 ```json
 {
-  "query": "Woodlands",
-  "cameras": [
-    {
-      "camera_id": "2701",
-      "location_name": "BKE - Woodlands",
-      "latitude": 1.4470,
-      "longitude": 103.7717,
-      "latest_image": "https://images.data.gov.sg/api/traffic-images/...",
-      "timestamp": "2026-03-17T11:56:21+08:00",
-      "resolution": "1920x1080"
-    }
-  ]
+  "success": true,
+  "data": {
+    "query": "Woodlands",
+    "cameras": [
+      {
+        "cameraId": 2701,
+        "locationName": "BKE - Woodlands",
+        "latitude": 1.4470,
+        "longitude": 103.7717,
+        "latestImage": "https://images.data.gov.sg/api/traffic-images/...",
+        "timestamp": "2026-03-17T11:56:21+08:00",
+        "resolution": "1920x1080"
+      }
+    ]
+  }
 }
 ```
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `query` | `string` | The search keyword used |
-| `cameras` | `CameraDetail[]` | Cameras with location names matching the query (case-insensitive partial match) |
+| `success` | `boolean` | `true` on success |
+| `data.query` | `string` | The search keyword used |
+| `data.cameras` | `CameraDetail[]` | Cameras with location names matching the query (case-insensitive partial match) |
 
 ---
 
