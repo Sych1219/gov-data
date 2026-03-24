@@ -445,11 +445,14 @@ GET /api/v1/zones                          → all zones
 Response:
 ```json
 {
-  "zones": [
-    { "name": "CBD",      "category": "district" },
-    { "name": "Tampines", "category": "district" },
-    { "name": "PIE",      "category": "highway"  }
-  ]
+  "success": true,
+  "data": {
+    "zones": [
+      { "name": "CBD",      "category": "district" },
+      { "name": "Tampines", "category": "district" },
+      { "name": "PIE",      "category": "highway"  }
+    ]
+  }
 }
 ```
 
