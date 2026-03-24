@@ -109,10 +109,8 @@ public class TrafficImageFetchService {
         String md5 = cam.getImageMetadata() != null ? cam.getImageMetadata().getMd5() : "";
 
         return snapshotRepository.findTopByCameraIdOrderByTimestampDesc(cameraId)
+                .filter(cameraSnapshot-> cameraSnapshot.getImageMd5().equals(md5) && cameraSnapshot.getTimestamp().isEqual(ts))
                 .flatMap(existing -> {
-                    if (existing.getImageMd5().equals(md5) && existing.getTimestamp().isEqual(ts)) {
-                        return Mono.<CameraSnapshot>empty();
-                    }
                     existing.setTimestamp(ts);
                     existing.setImageUrl(cam.getImage());
                     existing.setImageMd5(md5);
