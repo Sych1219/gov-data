@@ -3,7 +3,7 @@ spring:
     name: gov-data
 
   r2dbc:
-    url: r2dbc:postgresql://172.17.0.6:5432/mydb
+    url: r2dbc:postgresql://172.17.0.7:5432/mydb
     username: myuser
     password: mypass
   
