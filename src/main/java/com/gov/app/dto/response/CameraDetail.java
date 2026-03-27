@@ -15,4 +15,5 @@ public class CameraDetail {
     String latestImage;
     String timestamp;
     String resolution;
+    CameraAnalysisDetail analysis;
 }

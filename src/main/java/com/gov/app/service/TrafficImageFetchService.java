@@ -18,6 +18,7 @@ import reactor.util.retry.Retry;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.OffsetDateTime;
+import java.util.concurrent.atomic.AtomicInteger;
 
 @Slf4j
 @Service
@@ -30,6 +31,7 @@ public class TrafficImageFetchService {
     private final CameraRepository cameraRepository;
     private final CameraSnapshotRepository snapshotRepository;
     private final ExpresswayMapping expresswayMapping;
+    private final CameraAnalysisService cameraAnalysisService;
 
     public Mono<Void> fetchAndSave() {
         return trafficImageWebClient.get()
@@ -61,20 +63,38 @@ public class TrafficImageFetchService {
         }
 
         OffsetDateTime now = OffsetDateTime.now();
+        AtomicInteger analyzed = new AtomicInteger(0);
 
         return Flux.fromIterable(item.getCameras())
-                .flatMap(cam -> upsertCamera(cam, now)
-                        .then(upsertSnapshot(cam))
+                .flatMap(cam -> processCameraEntry(cam, now, analyzed)
                         .onErrorResume(ex -> {
-                            log.warn("Failed to persist camera {}: {}", cam.getCameraId(), ex);
+                            log.warn("Failed to persist camera {}: {}", cam.getCameraId(), ex.getMessage());
                             return Mono.empty();
                         })
                 )
                 .then()
-                .doOnSuccess(v -> log.info("Ingested {} cameras", item.getCameras().size()));
+                .doOnSuccess(v -> log.info("Ingested {} cameras, triggered analysis for {}",
+                        item.getCameras().size(), analyzed.get()));
     }
 
-    private Mono<Void> upsertCamera(GovTrafficImageResponse.Camera cam, OffsetDateTime now) {
+    private Mono<Void> processCameraEntry(GovTrafficImageResponse.Camera cam,
+                                          OffsetDateTime now,
+                                          AtomicInteger analyzedCounter) {
+        return upsertCamera(cam, now)
+                .flatMap(camera -> upsertSnapshot(cam)
+                        .flatMap(snapshot -> {
+                            analyzedCounter.incrementAndGet();
+                            return cameraAnalysisService.analyzeCamera(
+                                    camera.getCameraId(),
+                                    snapshot.getId(),
+                                    cam.getImage(),
+                                    camera.getLocationName()
+                            );
+                        })
+                );
+    }
+
+    private Mono<Camera> upsertCamera(GovTrafficImageResponse.Camera cam, OffsetDateTime now) {
         Long cameraId = Long.parseLong(cam.getCameraId());
         return cameraRepository.findByCameraId(cameraId)
                 .flatMap(existing -> {
@@ -99,41 +119,35 @@ public class TrafficImageFetchService {
                             .lastSeenAt(now)
                             .build();
                     return cameraRepository.save(camera);
-                }))
-                .then();
+                }));
     }
 
-    private Mono<Void> upsertSnapshot(GovTrafficImageResponse.Camera cam) {
+    /**
+     * Saves a new snapshot if the MD5 has changed. Returns the saved snapshot, or empty if unchanged.
+     */
+    private Mono<CameraSnapshot> upsertSnapshot(GovTrafficImageResponse.Camera cam) {
         Long cameraId = Long.parseLong(cam.getCameraId());
+        String newMd5 = cam.getImageMetadata() != null ? cam.getImageMetadata().getMd5() : "";
         OffsetDateTime ts = OffsetDateTime.parse(cam.getTimestamp());
-        String md5 = cam.getImageMetadata() != null ? cam.getImageMetadata().getMd5() : "";
 
         return snapshotRepository.findTopByCameraIdOrderByTimestampDesc(cameraId)
-                .filter(cameraSnapshot-> cameraSnapshot.getImageMd5().equals(md5) && cameraSnapshot.getTimestamp().isEqual(ts))
-                .flatMap(existing -> {
-                    existing.setTimestamp(ts);
-                    existing.setImageUrl(cam.getImage());
-                    existing.setImageMd5(md5);
-                    if (cam.getImageMetadata() != null) {
-                        existing.setImageWidth(cam.getImageMetadata().getWidth());
-                        existing.setImageHeight(cam.getImageMetadata().getHeight());
+                .map(existing -> existing.getImageMd5().equals(newMd5))  // true = MD5 unchanged
+                .defaultIfEmpty(false)                                    // no prior snapshot = changed
+                .flatMap(md5Unchanged -> {
+                    if (md5Unchanged) {
+                        return Mono.empty();
                     }
-                    existing.setCreatedAt(OffsetDateTime.now());
-                    return snapshotRepository.save(existing);
-                })
-                .switchIfEmpty(Mono.defer(() -> {
                     CameraSnapshot snapshot = CameraSnapshot.builder()
                             .cameraId(cameraId)
                             .timestamp(ts)
                             .imageUrl(cam.getImage())
-                            .imageMd5(md5)
+                            .imageMd5(newMd5)
                             .imageWidth(cam.getImageMetadata() != null ? cam.getImageMetadata().getWidth() : null)
                             .imageHeight(cam.getImageMetadata() != null ? cam.getImageMetadata().getHeight() : null)
                             .createdAt(OffsetDateTime.now())
                             .build();
                     return snapshotRepository.save(snapshot);
-                }))
-                .then();
+                });
     }
 
     private String resolveResolution(int width) {

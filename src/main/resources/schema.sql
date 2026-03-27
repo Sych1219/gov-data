@@ -94,3 +94,20 @@ CREATE TABLE IF NOT EXISTS camera_snapshots (
 
 CREATE INDEX IF NOT EXISTS idx_snapshots_camera_time
     ON camera_snapshots (camera_id, timestamp DESC);
+
+-- ── Camera analysis (latest LLM vision analysis per camera) ──────────────────
+CREATE TABLE IF NOT EXISTS camera_analysis (
+    id               BIGSERIAL PRIMARY KEY,
+    camera_id        BIGINT NOT NULL REFERENCES cameras(camera_id) UNIQUE,
+    snapshot_id      BIGINT NOT NULL REFERENCES camera_snapshots(id),
+    congestion       VARCHAR(20) NOT NULL,
+    vehicle_density  VARCHAR(20) NOT NULL,
+    incidents        VARCHAR(20) NOT NULL,
+    weather          VARCHAR(20) NOT NULL,
+    road_surface     VARCHAR(20) NOT NULL,
+    summary          TEXT NOT NULL,
+    analyzed_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_analysis_camera
+    ON camera_analysis (camera_id);

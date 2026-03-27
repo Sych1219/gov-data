@@ -162,7 +162,6 @@ CREATE TABLE camera_analysis (
     snapshot_id      BIGINT NOT NULL REFERENCES camera_snapshots(id),
     congestion       VARCHAR(20) NOT NULL,   -- free_flow | light | moderate | heavy | standstill
     vehicle_density  VARCHAR(20) NOT NULL,   -- empty | sparse | normal | dense | packed
-    vehicle_count    INT,                    -- estimated number of vehicles visible in the frame (null if indeterminate)
     incidents        VARCHAR(20) NOT NULL,   -- none | accident | breakdown | obstruction | roadworks
     weather          VARCHAR(20) NOT NULL,   -- clear | rain | heavy_rain | fog
     road_surface     VARCHAR(20) NOT NULL,   -- dry | wet | flooded | construction
@@ -276,7 +275,6 @@ All camera list endpoints return a shared `CameraDetail` object. The `analysis` 
   "analysis": {
     "congestion": "light",
     "vehicleDensity": "sparse",
-    "vehicleCount": 8,
     "incidents": "none",
     "weather": "clear",
     "roadSurface": "dry",
@@ -298,7 +296,6 @@ All camera list endpoints return a shared `CameraDetail` object. The `analysis` 
 | `analysis` | `Analysis?` | Latest LLM vision analysis; `null` if not yet analyzed |
 | `analysis.congestion` | `string` | `free_flow` \| `light` \| `moderate` \| `heavy` \| `standstill` |
 | `analysis.vehicleDensity` | `string` | `empty` \| `sparse` \| `normal` \| `dense` \| `packed` |
-| `analysis.vehicleCount` | `integer?` | Estimated number of vehicles visible in the frame; `null` if indeterminate |
 | `analysis.incidents` | `string` | `none` \| `accident` \| `breakdown` \| `obstruction` \| `roadworks` |
 | `analysis.weather` | `string` | `clear` \| `rain` \| `heavy_rain` \| `fog` |
 | `analysis.roadSurface` | `string` | `dry` \| `wet` \| `flooded` \| `construction` |
@@ -324,7 +321,7 @@ Returns all cameras with their latest snapshot and analysis.
         "latestImage": "https://images.data.gov.sg/api/traffic-images/...",
         "timestamp": "2026-03-17T11:56:21+08:00",
         "resolution": "1920x1080",
-        "analysis": { "congestion": "light", "vehicleDensity": "sparse", "vehicleCount": 8, "incidents": "none", "weather": "clear", "roadSurface": "dry", "summary": "Light traffic near Woodlands.", "analyzedAt": "2026-03-17T11:56:35+08:00" }
+        "analysis": { "congestion": "light", "vehicleDensity": "sparse", "incidents": "none", "weather": "clear", "roadSurface": "dry", "summary": "Light traffic near Woodlands.", "analyzedAt": "2026-03-17T11:56:35+08:00" }
       }
     ]
   }
@@ -353,7 +350,7 @@ Returns a single camera's detail with its latest image and analysis.
     "latestImage": "https://images.data.gov.sg/api/traffic-images/...",
     "timestamp": "2026-03-17T11:56:21+08:00",
     "resolution": "1920x1080",
-    "analysis": { "congestion": "light", "vehicleDensity": "sparse", "vehicleCount": 8, "incidents": "none", "weather": "clear", "roadSurface": "dry", "summary": "Light traffic near Woodlands.", "analyzedAt": "2026-03-17T11:56:35+08:00" }
+    "analysis": { "congestion": "light", "vehicleDensity": "sparse", "incidents": "none", "weather": "clear", "roadSurface": "dry", "summary": "Light traffic near Woodlands.", "analyzedAt": "2026-03-17T11:56:35+08:00" }
   }
 }
 ```
@@ -387,7 +384,7 @@ Returns cameras within the specified radius of a GPS point.
         "latestImage": "https://images.data.gov.sg/api/traffic-images/...",
         "timestamp": "2026-03-17T11:56:21+08:00",
         "resolution": "1920x1080",
-        "analysis": { "congestion": "moderate", "vehicleDensity": "normal", "vehicleCount": 23, "incidents": "none", "weather": "clear", "roadSurface": "dry", "summary": "Moderate traffic on CTE near Moulmein.", "analyzedAt": "2026-03-17T11:56:35+08:00" }
+        "analysis": { "congestion": "moderate", "vehicleDensity": "normal", "incidents": "none", "weather": "clear", "roadSurface": "dry", "summary": "Moderate traffic on CTE near Moulmein.", "analyzedAt": "2026-03-17T11:56:35+08:00" }
       }
     ]
   }
@@ -425,7 +422,7 @@ Returns all cameras along an expressway.
         "latestImage": "https://images.data.gov.sg/api/traffic-images/...",
         "timestamp": "2026-03-17T11:56:21+08:00",
         "resolution": "1920x1080",
-        "analysis": { "congestion": "light", "vehicleDensity": "sparse", "vehicleCount": 6, "incidents": "none", "weather": "clear", "roadSurface": "dry", "summary": "Light traffic moving freely.", "analyzedAt": "2026-03-17T11:56:35+08:00" }
+        "analysis": { "congestion": "light", "vehicleDensity": "sparse", "incidents": "none", "weather": "clear", "roadSurface": "dry", "summary": "Light traffic moving freely.", "analyzedAt": "2026-03-17T11:56:35+08:00" }
       }
     ]
   }
@@ -463,7 +460,7 @@ Returns cameras matching a location name search.
         "latestImage": "https://images.data.gov.sg/api/traffic-images/...",
         "timestamp": "2026-03-17T11:56:21+08:00",
         "resolution": "1920x1080",
-        "analysis": { "congestion": "light", "vehicleDensity": "sparse", "vehicleCount": 8, "incidents": "none", "weather": "clear", "roadSurface": "dry", "summary": "Light traffic near Woodlands.", "analyzedAt": "2026-03-17T11:56:35+08:00" }
+        "analysis": { "congestion": "light", "vehicleDensity": "sparse", "incidents": "none", "weather": "clear", "roadSurface": "dry", "summary": "Light traffic near Woodlands.", "analyzedAt": "2026-03-17T11:56:35+08:00" }
       }
     ]
   }

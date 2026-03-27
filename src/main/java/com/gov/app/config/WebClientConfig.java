@@ -18,6 +18,9 @@ public class WebClientConfig {
     @Value("${gov-api.traffic-image.base-url}")
     private String trafficImageBaseUrl;
 
+    @Value("${gov-api.civic-app.base-url}")
+    private String civicAppBaseUrl;
+
     @Bean
     public WebClient taxiWebClient(WebClient.Builder builder) {
         WebClient.Builder b = builder.baseUrl(baseUrl);
@@ -30,5 +33,15 @@ public class WebClientConfig {
     @Bean
     public WebClient trafficImageWebClient(WebClient.Builder builder) {
         return builder.baseUrl(trafficImageBaseUrl).build();
+    }
+
+    @Bean
+    public WebClient civicAppWebClient(WebClient.Builder builder) {
+        return builder.baseUrl(civicAppBaseUrl).build();
+    }
+
+    @Bean
+    public WebClient imageDownloadWebClient(WebClient.Builder builder) {
+        return builder.build();
     }
 }
