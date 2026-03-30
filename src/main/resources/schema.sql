@@ -1,65 +1,113 @@
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
+-- Enable PostGIS extension (idempotent)
+CREATE EXTENSION IF NOT EXISTS postgis;
 
-CREATE TABLE IF NOT EXISTS gov_records
-(
-    id       BIGSERIAL PRIMARY KEY,
-    name     VARCHAR(255) NOT NULL,
-    category VARCHAR(100) NOT NULL
+-- Enable pg_trgm for fuzzy zone name search
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+
+-- ── Snapshot metadata (one row per API poll) ─────────────────────────────────
+CREATE TABLE IF NOT EXISTS taxi_snapshots (
+    id            BIGSERIAL    PRIMARY KEY,
+    api_timestamp TIMESTAMPTZ  NOT NULL,
+    taxi_count    INT          NOT NULL,
+    fetched_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
 
-    CREATE TABLE IF NOT EXISTS gov_api_registration
-    (
-        id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        name              VARCHAR(255)        NOT NULL,
-        description       TEXT,
-        base_url          VARCHAR(512)        NOT NULL,
-        http_method       VARCHAR(20)         NOT NULL,
-        headers_json      TEXT,
-        query_params_json TEXT,
-        body_params_json  TEXT,
-        created_at        TIMESTAMPTZ         NOT NULL DEFAULT NOW(),
-        CONSTRAINT uk_gov_api_registration_name_url UNIQUE (name, base_url)
-    );
--- OpenAPI Registration Tables for v2
-CREATE TABLE IF NOT EXISTS gov_openapi_registration
-(
-    id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name                 VARCHAR(255)        NOT NULL,
-    title                VARCHAR(255)        NOT NULL,
-    version              VARCHAR(50)         NOT NULL,
-    description          TEXT,
-    category             VARCHAR(100),
-    base_url             VARCHAR(512)        NOT NULL,
-    openapi_version      VARCHAR(20)         NOT NULL,
-    openapi_spec_json    TEXT                NOT NULL,
-    endpoint_count       INTEGER             DEFAULT 0,
-    tags                 TEXT[],
-    created_at           TIMESTAMPTZ         NOT NULL DEFAULT NOW(),
-    updated_at           TIMESTAMPTZ         NOT NULL DEFAULT NOW(),
-    CONSTRAINT uk_openapi_title_url UNIQUE (title, base_url)
+CREATE INDEX IF NOT EXISTS idx_taxi_snapshots_api_timestamp
+    ON taxi_snapshots (api_timestamp DESC);
+
+-- ── Individual taxi positions (partitioned by api_timestamp, SGT-day aligned) ─
+-- Partitioned by RANGE on api_timestamp (UTC). Each partition covers one SGT day:
+--   SGT day YYYY-MM-DD = UTC (YYYY-MM-(DD-1) 16:00:00+00) to (YYYY-MM-DD 16:00:00+00)
+-- geog is a GEOGRAPHY generated column — R2DBC entities never map this column.
+-- NOTE: Daily partitions must be created manually before each SGT day starts.
+--       The default partition below acts as a safety net for unmapped rows.
+CREATE SEQUENCE IF NOT EXISTS taxi_positions_id_seq;
+
+CREATE TABLE IF NOT EXISTS taxi_positions (
+    id            BIGINT      NOT NULL DEFAULT nextval('taxi_positions_id_seq'),
+    snapshot_id   BIGINT      NOT NULL,
+    api_timestamp TIMESTAMPTZ NOT NULL,
+    longitude     FLOAT8      NOT NULL,
+    latitude      FLOAT8      NOT NULL,
+    geog          GEOGRAPHY(POINT, 4326)
+                      GENERATED ALWAYS AS (
+                          ST_SetSRID(ST_MakePoint(longitude, latitude), 4326)::geography
+                      ) STORED,
+    PRIMARY KEY (id, api_timestamp)
+) PARTITION BY RANGE (api_timestamp);
+
+-- Safety net partition — catches rows with no matching daily partition
+CREATE TABLE IF NOT EXISTS taxi_positions_default
+    PARTITION OF taxi_positions DEFAULT;
+
+CREATE INDEX IF NOT EXISTS idx_taxi_positions_snapshot_id
+    ON taxi_positions (snapshot_id);
+
+CREATE INDEX IF NOT EXISTS idx_taxi_positions_geog
+    ON taxi_positions USING GIST (geog);
+
+CREATE INDEX IF NOT EXISTS idx_taxi_positions_api_timestamp
+    ON taxi_positions (api_timestamp DESC);
+
+-- ── Pre-defined named zones (districts, roads, highways) ─────────────────────
+CREATE TABLE IF NOT EXISTS zones (
+    id       SERIAL  PRIMARY KEY,
+    name     TEXT    NOT NULL UNIQUE,
+    category TEXT    NOT NULL,   -- 'district' | 'road' | 'highway'
+    geog     GEOGRAPHY NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_openapi_title ON gov_openapi_registration (title);
-CREATE INDEX IF NOT EXISTS idx_openapi_category ON gov_openapi_registration (category);
-CREATE INDEX IF NOT EXISTS idx_openapi_tags ON gov_openapi_registration USING GIN (tags);
+CREATE INDEX IF NOT EXISTS idx_zones_name
+    ON zones (name);
 
-CREATE TABLE IF NOT EXISTS gov_openapi_endpoint
-(
-    id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    openapi_id           UUID                NOT NULL REFERENCES gov_openapi_registration(id) ON DELETE CASCADE,
-    path                 VARCHAR(512)        NOT NULL,
-    http_method          VARCHAR(20)         NOT NULL,
-    operation_id         VARCHAR(255),
-    summary              TEXT,
-    description          TEXT,
-    parameters_json      TEXT,
-    request_body_json    TEXT,
-    responses_json       TEXT,
-    security_json        TEXT,
-    tags                 TEXT[],
-    created_at           TIMESTAMPTZ         NOT NULL DEFAULT NOW(),
-    CONSTRAINT uk_endpoint_path_method UNIQUE (openapi_id, path, http_method)
+CREATE INDEX IF NOT EXISTS idx_zones_name_trgm
+    ON zones USING GIN (name gin_trgm_ops);
+
+CREATE INDEX IF NOT EXISTS idx_zones_geog
+    ON zones USING GIST (geog);
+
+-- ── Traffic cameras (static registry) ────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS cameras (
+    id              BIGSERIAL PRIMARY KEY,
+    camera_id       BIGINT NOT NULL UNIQUE,
+    latitude        DECIMAL(12, 8) NOT NULL,
+    longitude       DECIMAL(12, 8) NOT NULL,
+    location_name   VARCHAR(255),
+    expressway      VARCHAR(50),
+    resolution      VARCHAR(20),
+    first_seen_at   TIMESTAMPTZ,
+    last_seen_at    TIMESTAMPTZ
 );
 
-CREATE INDEX IF NOT EXISTS idx_endpoint_openapi_id ON gov_openapi_endpoint (openapi_id);
-CREATE INDEX IF NOT EXISTS idx_endpoint_method ON gov_openapi_endpoint (http_method);
+-- ── Camera snapshots (latest image per camera) ──────────────────────────────
+CREATE TABLE IF NOT EXISTS camera_snapshots (
+    id              BIGSERIAL PRIMARY KEY,
+    camera_id       BIGINT NOT NULL REFERENCES cameras(camera_id),
+    timestamp       TIMESTAMPTZ NOT NULL,
+    image_url       TEXT NOT NULL,
+    image_md5       VARCHAR(32) NOT NULL,
+    image_width     INT,
+    image_height    INT,
+    created_at      TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE (camera_id, timestamp)
+);
+
+CREATE INDEX IF NOT EXISTS idx_snapshots_camera_time
+    ON camera_snapshots (camera_id, timestamp DESC);
+
+-- ── Camera analysis (latest LLM vision analysis per camera) ──────────────────
+CREATE TABLE IF NOT EXISTS camera_analysis (
+    id               BIGSERIAL PRIMARY KEY,
+    camera_id        BIGINT NOT NULL REFERENCES cameras(camera_id) UNIQUE,
+    snapshot_id      BIGINT NOT NULL REFERENCES camera_snapshots(id),
+    congestion       VARCHAR(20) NOT NULL,
+    vehicle_density  VARCHAR(20) NOT NULL,
+    incidents        VARCHAR(20) NOT NULL,
+    weather          VARCHAR(20) NOT NULL,
+    road_surface     VARCHAR(20) NOT NULL,
+    summary          TEXT NOT NULL,
+    analyzed_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_analysis_camera
+    ON camera_analysis (camera_id);
