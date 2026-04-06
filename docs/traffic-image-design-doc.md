@@ -209,12 +209,10 @@ gov-data scheduler
     │
     │  (new image detected via md5 diff)
     │
-    ├─► Download image bytes from images.data.gov.sg
-    │
-    ├─► POST civic-app /api/analyze-camera
-    │       multipart fields:
-    │         image        = <image bytes>
-    │         camera_id    = "2701"
+    ├─► POST civi-app /api/analyze-camera
+    │       Content-Type: application/json
+    │         image_url     = "https://images.data.gov.sg/..."
+    │         camera_id     = "2701"
     │         location_name = "BKE - Woodlands"
     │
     └─► On 200: parse { analysis: { congestion, vehicle_density, ... } }
@@ -245,7 +243,71 @@ public class TrafficDataScheduler {
 
 ---
 
-## 5. API Design
+## 5. civic-app Integration — `/api/analyze-camera`
+
+`gov-data` calls the civic-app Python service (FastAPI) to produce a structured vision analysis for each new camera image.
+
+### Endpoint
+
+```
+POST http://<civic-app-host>/api/analyze-camera
+Content-Type: application/json
+```
+
+### Request
+
+```json
+{
+  "image_url": "https://images.data.gov.sg/api/traffic-images/2026/3/...",
+  "camera_id": "2701",
+  "location_name": "BKE - Woodlands"
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `image_url` | `string` | Yes | Public URL of the camera snapshot to analyze |
+| `camera_id` | `string` | No | Camera identifier — passed to the vision model as context |
+| `location_name` | `string` | No | Human-readable location — passed to the vision model as context |
+
+### Response (200 OK)
+
+```json
+{
+  "analysis": {
+    "congestion": "light",
+    "vehicle_density": "sparse",
+    "incidents": "none",
+    "weather": "clear",
+    "road_surface": "dry",
+    "summary": "Light traffic moving freely near Woodlands checkpoint."
+  }
+}
+```
+
+| Field | Type | Values |
+|-------|------|--------|
+| `analysis.congestion` | `string` | `free_flow` \| `light` \| `moderate` \| `heavy` \| `standstill` |
+| `analysis.vehicle_density` | `string` | `empty` \| `sparse` \| `normal` \| `dense` \| `packed` |
+| `analysis.incidents` | `string` | `none` \| `accident` \| `breakdown` \| `obstruction` \| `roadworks` |
+| `analysis.weather` | `string` | `clear` \| `rain` \| `heavy_rain` \| `fog` |
+| `analysis.road_surface` | `string` | `dry` \| `wet` \| `flooded` \| `construction` |
+| `analysis.summary` | `string` | One-sentence human-readable description |
+
+> **Note:** `analyzedAt` is **not** returned by civic-app — `gov-data` sets this timestamp when upserting into `camera_analysis`.
+
+### Error Handling
+
+| HTTP Status | Meaning | gov-data action |
+|-------------|---------|-----------------|
+| 200 | Success | UPSERT `camera_analysis` |
+| 422 | Invalid request (bad URL, missing fields) | Log error, skip UPSERT |
+| 500 | Vision model or internal failure | Log warning, retain previous analysis row |
+| Timeout / unreachable | civic-app down | Log warning, retain previous analysis row, continue with other cameras |
+
+---
+
+## 6. API Design
 
 ### Endpoints
 
@@ -475,7 +537,7 @@ Returns cameras matching a location name search.
 
 ---
 
-## 6. Expressway-Camera Mapping
+## 7. Expressway-Camera Mapping
 
 > **Note:** Initial estimate based on camera_id prefix patterns and GPS clustering. Should be verified via reverse geocoding before production.
 
@@ -493,7 +555,7 @@ Returns cameras matching a location name search.
 
 ---
 
-## 7. Frontend UI Design
+## 8. Frontend UI Design
 
 See `civic-frontend` → `docs/traffic-camera-ui-design.md` for detailed wireframes and component design.
 
@@ -504,12 +566,12 @@ See `civic-frontend` → `docs/traffic-camera-ui-design.md` for detailed wirefra
 
 ---
 
-## 8. Non-Goals
+## 9. Non-Goals
 - Background LLM monitoring (deferred — MVP is on-demand only)
 
 ---
 
-## 9. Future Enhancements
+## 10. Future Enhancements
 
 Features to add after MVP is validated:
 
