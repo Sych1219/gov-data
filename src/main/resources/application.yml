@@ -3,9 +3,9 @@ spring:
     name: gov-data
 
   r2dbc:
-    url: r2dbc:postgresql://172.17.0.7:5432/mydb
-    username: myuser
-    password: mypass
+    url: r2dbc:postgresql://${DB_HOST}:5432/mydb
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
   
   sql:
     init:
