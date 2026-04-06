@@ -83,6 +83,7 @@ public class TrafficImageFetchService {
         return upsertCamera(cam, now)
                 .flatMap(camera -> upsertSnapshot(cam)
                         .flatMap(snapshot -> {
+                            log.info(">>> processCameraEntry flatMap reached for camera {}", camera.getCameraId());
                             analyzedCounter.incrementAndGet();
                             return cameraAnalysisService.analyzeCamera(
                                     camera.getCameraId(),
@@ -104,7 +105,8 @@ public class TrafficImageFetchService {
                     if (cam.getImageMetadata() != null) {
                         existing.setResolution(resolveResolution(cam.getImageMetadata().getWidth()));
                     }
-                    return cameraRepository.save(existing);
+                    Mono<Camera> save = cameraRepository.save(existing);
+                    return save;
                 })
                 .switchIfEmpty(Mono.defer(() -> {
                     String expressway = expresswayMapping.resolveExpressway(cameraId);
@@ -119,7 +121,8 @@ public class TrafficImageFetchService {
                             .lastSeenAt(now)
                             .build();
                     return cameraRepository.save(camera);
-                }));
+                }))
+                .doOnError(ex -> log.error("Failed to upsert camera {}: {}", cameraId, ex.getMessage()));
     }
 
     /**

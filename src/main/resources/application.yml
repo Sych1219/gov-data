@@ -57,7 +57,7 @@ gov-api:
     fetch-interval-ms: 20000
 
   civic-app:
-    base-url: http://localhost:3000
+    base-url: http://localhost:8000
 
 zone:
   seed:

@@ -40,8 +40,4 @@ public class WebClientConfig {
         return builder.baseUrl(civicAppBaseUrl).build();
     }
 
-    @Bean
-    public WebClient imageDownloadWebClient(WebClient.Builder builder) {
-        return builder.build();
-    }
 }
