@@ -15,7 +15,6 @@ import org.springframework.web.client.RestClientException;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.Optional;
-import java.util.concurrent.atomic.AtomicInteger;
 
 @Slf4j
 @Service
@@ -29,7 +28,6 @@ public class TrafficImageFetchService {
     private final CameraRepository cameraRepository;
     private final CameraSnapshotRepository snapshotRepository;
     private final ExpresswayMapping expresswayMapping;
-    private final CameraAnalysisService cameraAnalysisService;
 
     public void fetchAndSave() {
         GovTrafficImageResponse response = fetchWithRetry();
@@ -77,34 +75,20 @@ public class TrafficImageFetchService {
         }
 
         OffsetDateTime now = OffsetDateTime.now();
-        AtomicInteger analyzed = new AtomicInteger(0);
 
         for (GovTrafficImageResponse.Camera cam : item.getCameras()) {
             try {
-                processCameraEntry(cam, now, analyzed);
+                processCameraEntry(cam, now);
             } catch (Exception ex) {
                 log.warn("Failed to persist camera {}: {}", cam.getCameraId(), ex.getMessage());
             }
         }
-        log.info("Ingested {} cameras, triggered analysis for {}",
-                item.getCameras().size(), analyzed.get());
+        log.info("Ingested {} cameras", item.getCameras().size());
     }
 
-    private void processCameraEntry(GovTrafficImageResponse.Camera cam,
-                                    OffsetDateTime now,
-                                    AtomicInteger analyzedCounter) {
-        Camera camera = upsertCamera(cam, now);
-        CameraSnapshot snapshot = upsertSnapshot(cam);
-        if (snapshot != null) {
-            log.info(">>> processCameraEntry flatMap reached for camera {}", camera.getCameraId());
-            analyzedCounter.incrementAndGet();
-            cameraAnalysisService.analyzeCamera(
-                    camera.getCameraId(),
-                    snapshot.getId(),
-                    cam.getImage(),
-                    camera.getLocationName()
-            );
-        }
+    private void processCameraEntry(GovTrafficImageResponse.Camera cam, OffsetDateTime now) {
+        upsertCamera(cam, now);
+        upsertSnapshot(cam);
     }
 
     private Camera upsertCamera(GovTrafficImageResponse.Camera cam, OffsetDateTime now) {

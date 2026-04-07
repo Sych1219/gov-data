@@ -27,9 +27,8 @@ Singapore's government publishes real-time traffic camera images — ~87 cameras
 ### What MVP Does
 
 1. **Ingest** — Poll the government API every 20s, store camera metadata and snapshots in PostgreSQL
-2. **Analyze** — On each ingest cycle, call `civic-app POST /api/analyze-camera` for cameras with a new image (MD5 changed); store the structured analysis result in `camera_analysis`
-3. **Serve** — Expose REST APIs to query cameras by expressway, location, or proximity; all responses include the latest pre-computed `analysis` object
-4. **Display** — Operator dashboard with camera overview and LLM-driven traffic analysis (see `civic-frontend` → `docs/traffic-camera-ui-design.md`)
+2. **Serve** — Expose REST APIs to query cameras by expressway, location, or proximity
+3. **Display** — Operator dashboard with camera overview (see `civic-frontend` → `docs/traffic-camera-ui-design.md`)
 
 ### Service Interaction
 
@@ -38,21 +37,15 @@ data.gov.sg API  (every 20s)
       │
       ▼
 gov-data (Java — this project)
-      │  on new image (md5 diff)
-      ├─► POST civic-app /api/analyze-camera
-      │         │
-      │         └─► Ollama qwen3.5 (local vision)
-      │                   │
-      │         ◄──────────┘ { analysis }
       │
+      ├─► UPSERT cameras
       ├─► UPSERT camera_snapshots
-      ├─► UPSERT camera_analysis
       │
       ▼
   PostgreSQL
       │
       ▼
-civic-frontend  ←  GET /api/cameras/...  (includes pre-computed analysis)
+civic-frontend  ←  GET /api/cameras/...
 ```
 
 ### What MVP Does NOT Do
@@ -153,7 +146,6 @@ CREATE INDEX idx_snapshots_camera_time ON camera_snapshots (camera_id, timestamp
 
 ### `camera_analysis` — Latest LLM vision analysis per camera
 
-Stores the most recent structured analysis result produced by calling the `civic-app` vision endpoint. One row per camera, replaced on each successful analysis.
 
 ```sql
 CREATE TABLE camera_analysis (
@@ -172,13 +164,13 @@ CREATE TABLE camera_analysis (
 CREATE INDEX idx_analysis_camera ON camera_analysis (camera_id);
 ```
 
-> **UNIQUE on `camera_id`** — ensures one row per camera. Each ingest cycle UPSERTs (replaces) the analysis when a new image is detected. The table stays at ~87 rows.
+> **UNIQUE on `camera_id`** — ensures one row per camera. The table stays at ~87 rows.
 
 ---
 
 ## 4. Scheduler
 
-MVP has **one scheduled job**: snapshot ingestion + analysis.
+MVP has **one scheduled job**: snapshot ingestion.
 
 ### `ingest-snapshots` (every 20 seconds)
 
@@ -190,33 +182,11 @@ MVP has **one scheduled job**: snapshot ingestion + analysis.
 2. For each camera in response:
    a. UPSERT into cameras table (update last_seen_at, coordinates)
    b. Compare incoming image_md5 against the stored snapshot md5
-   c. If md5 is UNCHANGED → skip (image has not changed, no analysis needed)
+   c. If md5 is UNCHANGED → skip
    d. If md5 is NEW or camera is first seen:
       i.  UPSERT into camera_snapshots (replace previous snapshot)
-      ii. POST /api/analyze-camera to civic-app with the image URL + camera_id + location_name
-            - Download image from gov.sg URL, send as multipart/form-data
-            - Retry up to 2x on timeout or 5xx
-            - If civic-app is unreachable → log warning, skip analysis for this camera
-      iii. On success: UPSERT into camera_analysis (replace previous analysis row)
 
-3. Log metrics: cameras_processed, cameras_analyzed, api_latency_ms, analysis_latency_ms, errors
-```
-
-### Analysis Flow Detail
-
-```
-gov-data scheduler
-    │
-    │  (new image detected via md5 diff)
-    │
-    ├─► POST civi-app /api/analyze-camera
-    │       Content-Type: application/json
-    │         image_url     = "https://images.data.gov.sg/..."
-    │         camera_id     = "2701"
-    │         location_name = "BKE - Woodlands"
-    │
-    └─► On 200: parse { analysis: { congestion, vehicle_density, ... } }
-                UPSERT camera_analysis WHERE camera_id = ?
+3. Log metrics: cameras_processed, api_latency_ms, errors
 ```
 
 ### Implementation
@@ -236,78 +206,12 @@ public class TrafficDataScheduler {
 - Partial response → ingest what's available, log warning
 - DB write failure for individual camera → continue with others
 - Snapshot overlap → `ON CONFLICT (camera_id, timestamp) DO NOTHING`
-- civic-app timeout / 5xx → log warning, retain previous analysis row, continue with other cameras
-- civic-app returns malformed JSON → log error, skip UPSERT for that camera
 
-> **Why MD5 gating?** Images refresh every 20s but often stay identical. Calling vision analysis on unchanged images wastes local GPU resources and adds latency. Only analyzing new images keeps the analysis fresh and the scheduler fast.
+> **Why MD5 gating?** Images refresh every 20s but often stay identical. Only saving new images keeps the snapshot table fresh without redundant writes.
 
 ---
 
-## 5. civic-app Integration — `/api/analyze-camera`
-
-`gov-data` calls the civic-app Python service (FastAPI) to produce a structured vision analysis for each new camera image.
-
-### Endpoint
-
-```
-POST http://<civic-app-host>/api/analyze-camera
-Content-Type: application/json
-```
-
-### Request
-
-```json
-{
-  "image_url": "https://images.data.gov.sg/api/traffic-images/2026/3/...",
-  "camera_id": "2701",
-  "location_name": "BKE - Woodlands"
-}
-```
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `image_url` | `string` | Yes | Public URL of the camera snapshot to analyze |
-| `camera_id` | `string` | No | Camera identifier — passed to the vision model as context |
-| `location_name` | `string` | No | Human-readable location — passed to the vision model as context |
-
-### Response (200 OK)
-
-```json
-{
-  "analysis": {
-    "congestion": "light",
-    "vehicle_density": "sparse",
-    "incidents": "none",
-    "weather": "clear",
-    "road_surface": "dry",
-    "summary": "Light traffic moving freely near Woodlands checkpoint."
-  }
-}
-```
-
-| Field | Type | Values |
-|-------|------|--------|
-| `analysis.congestion` | `string` | `free_flow` \| `light` \| `moderate` \| `heavy` \| `standstill` |
-| `analysis.vehicle_density` | `string` | `empty` \| `sparse` \| `normal` \| `dense` \| `packed` |
-| `analysis.incidents` | `string` | `none` \| `accident` \| `breakdown` \| `obstruction` \| `roadworks` |
-| `analysis.weather` | `string` | `clear` \| `rain` \| `heavy_rain` \| `fog` |
-| `analysis.road_surface` | `string` | `dry` \| `wet` \| `flooded` \| `construction` |
-| `analysis.summary` | `string` | One-sentence human-readable description |
-
-> **Note:** `analyzedAt` is **not** returned by civic-app — `gov-data` sets this timestamp when upserting into `camera_analysis`.
-
-### Error Handling
-
-| HTTP Status | Meaning | gov-data action |
-|-------------|---------|-----------------|
-| 200 | Success | UPSERT `camera_analysis` |
-| 422 | Invalid request (bad URL, missing fields) | Log error, skip UPSERT |
-| 500 | Vision model or internal failure | Log warning, retain previous analysis row |
-| Timeout / unreachable | civic-app down | Log warning, retain previous analysis row, continue with other cameras |
-
----
-
-## 6. API Design
+## 5. API Design
 
 ### Endpoints
 
@@ -323,7 +227,7 @@ Content-Type: application/json
 
 ### `CameraDetail` Object
 
-All camera list endpoints return a shared `CameraDetail` object. The `analysis` field is included when a vision analysis has been stored for that camera; it is `null` if the camera has never been successfully analyzed yet.
+All camera list endpoints return a shared `CameraDetail` object.
 
 ```json
 {
@@ -537,7 +441,7 @@ Returns cameras matching a location name search.
 
 ---
 
-## 7. Expressway-Camera Mapping
+## 6. Expressway-Camera Mapping
 
 > **Note:** Initial estimate based on camera_id prefix patterns and GPS clustering. Should be verified via reverse geocoding before production.
 
@@ -555,7 +459,7 @@ Returns cameras matching a location name search.
 
 ---
 
-## 8. Frontend UI Design
+## 7. Frontend UI Design
 
 See `civic-frontend` → `docs/traffic-camera-ui-design.md` for detailed wireframes and component design.
 
@@ -566,12 +470,12 @@ See `civic-frontend` → `docs/traffic-camera-ui-design.md` for detailed wirefra
 
 ---
 
-## 9. Non-Goals
+## 8. Non-Goals
 - Background LLM monitoring (deferred — MVP is on-demand only)
 
 ---
 
-## 10. Future Enhancements
+## 9. Future Enhancements
 
 Features to add after MVP is validated:
 
