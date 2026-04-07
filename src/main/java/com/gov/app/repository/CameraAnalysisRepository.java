@@ -1,18 +1,21 @@
 package com.gov.app.repository;
 
 import com.gov.app.domain.CameraAnalysis;
-import org.springframework.data.r2dbc.repository.Modifying;
-import org.springframework.data.r2dbc.repository.Query;
-import org.springframework.data.repository.reactive.ReactiveCrudRepository;
-import reactor.core.publisher.Flux;
-import reactor.core.publisher.Mono;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.transaction.annotation.Transactional;
 
-public interface CameraAnalysisRepository extends ReactiveCrudRepository<CameraAnalysis, Long> {
+import java.util.List;
+import java.util.Optional;
 
-    Mono<CameraAnalysis> findByCameraId(Long cameraId);
+public interface CameraAnalysisRepository extends JpaRepository<CameraAnalysis, Long> {
 
+    Optional<CameraAnalysis> findByCameraId(Long cameraId);
+
+    @Transactional
     @Modifying
-    @Query("""
+    @Query(value = """
         INSERT INTO camera_analysis
             (camera_id, snapshot_id, congestion, vehicle_density,
              incidents, weather, road_surface, summary, analyzed_at)
@@ -28,10 +31,10 @@ public interface CameraAnalysisRepository extends ReactiveCrudRepository<CameraA
             road_surface     = EXCLUDED.road_surface,
             summary          = EXCLUDED.summary,
             analyzed_at      = EXCLUDED.analyzed_at
-        """)
-    Mono<Void> upsert(Long cameraId, Long snapshotId, String congestion, String vehicleDensity,
-                      String incidents, String weather, String roadSurface, String summary);
+        """, nativeQuery = true)
+    void upsert(Long cameraId, Long snapshotId, String congestion, String vehicleDensity,
+                String incidents, String weather, String roadSurface, String summary);
 
-    @Query("SELECT * FROM camera_analysis WHERE camera_id = ANY(:cameraIds)")
-    Flux<CameraAnalysis> findByCameraIds(Long[] cameraIds);
+    @Query(value = "SELECT * FROM camera_analysis WHERE camera_id IN (:cameraIds)", nativeQuery = true)
+    List<CameraAnalysis> findByCameraIds(List<Long> cameraIds);
 }

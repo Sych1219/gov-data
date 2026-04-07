@@ -1,12 +1,10 @@
 package com.gov.app.domain;
 
+import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import org.springframework.data.annotation.Id;
-import org.springframework.data.relational.core.mapping.Column;
-import org.springframework.data.relational.core.mapping.Table;
 
 import java.time.OffsetDateTime;
 
@@ -14,16 +12,18 @@ import java.time.OffsetDateTime;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@Table("taxi_positions")
+@Entity
+@Table(name = "taxi_positions")
 public class TaxiPosition {
 
     @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column("snapshot_id")
+    @Column(name = "snapshot_id")
     private Long snapshotId;
 
-    @Column("api_timestamp")
+    @Column(name = "api_timestamp")
     private OffsetDateTime apiTimestamp;
 
     private double longitude;
@@ -31,5 +31,5 @@ public class TaxiPosition {
     private double latitude;
 
     // NOTE: The 'geog' GEOGRAPHY column is a generated column in PostgreSQL.
-    // It is intentionally excluded from this entity — R2DBC must never write to it.
+    // It is intentionally excluded from this entity — JPA must never write to it.
 }

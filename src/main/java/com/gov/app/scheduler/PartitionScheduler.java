@@ -26,23 +26,13 @@ public class PartitionScheduler {
     @EventListener(ApplicationReadyEvent.class)
     public void onStartup() {
         log.info("Ensuring taxi_positions partitions exist for today and tomorrow (SGT)");
-        partitionRepository.ensurePartitionsExist(2)
-                .subscribe(
-                        null,
-                        ex -> log.error("Startup partition creation failed: {}", ex.getMessage()),
-                        () -> log.info("Startup partition check complete")
-                );
+        partitionRepository.ensurePartitionsExist(2);
     }
 
     /** Runs daily at 15:30 UTC = 23:30 SGT — 30 minutes before the next SGT day starts. */
     @Scheduled(cron = "0 30 15 * * *", zone = "UTC")
     public void createNextPartition() {
         log.info("Scheduled: creating taxi_positions partition for next SGT day");
-        partitionRepository.ensurePartitionsExist(2)
-                .subscribe(
-                        null,
-                        ex -> log.error("Scheduled partition creation failed: {}", ex.getMessage()),
-                        () -> log.info("Scheduled partition creation complete")
-                );
+        partitionRepository.ensurePartitionsExist(2);
     }
 }

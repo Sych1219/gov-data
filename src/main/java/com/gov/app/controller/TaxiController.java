@@ -23,7 +23,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
-import reactor.core.publisher.Mono;
 
 @Slf4j
 @Tag(name = "Taxi Availability", description = "Real-time and historical taxi position queries")
@@ -44,7 +43,7 @@ public class TaxiController {
             content = @Content(schema = @Schema(ref = "#/components/schemas/ErrorResponse")))
     })
     @GetMapping("/nearby")
-    public Mono<ApiResponse<TaxiResponseData>> nearby(
+    public ApiResponse<TaxiResponseData> nearby(
             @Parameter(description = "Latitude (-90 to 90)", example = "1.3521")
             @RequestParam @DecimalMin("-90.0") @DecimalMax("90.0") double lat,
 
@@ -60,7 +59,7 @@ public class TaxiController {
             @Parameter(description = "Target time ISO-8601 SGT. Defaults to latest snapshot.", example = "2025-01-15T08:30:00+08:00")
             @RequestParam(required = false) @Iso8601Sgt String datetime) {
         log.info("GET /nearby - lat={}, lon={}, radius={}, limit={}, datetime={}", lat, lon, radius, limit, datetime);
-        return queryService.nearby(lat, lon, radius, limit, datetime).map(ApiResponse::ok);
+        return ApiResponse.ok(queryService.nearby(lat, lon, radius, limit, datetime));
     }
 
     /** 4.2 Nearest N taxis with distances */
@@ -72,7 +71,7 @@ public class TaxiController {
             content = @Content(schema = @Schema(ref = "#/components/schemas/ErrorResponse")))
     })
     @GetMapping("/nearest")
-    public Mono<ApiResponse<TaxiResponseData>> nearest(
+    public ApiResponse<TaxiResponseData> nearest(
             @Parameter(description = "Latitude (-90 to 90)", example = "1.3521")
             @RequestParam @DecimalMin("-90.0") @DecimalMax("90.0") double lat,
 
@@ -85,7 +84,7 @@ public class TaxiController {
             @Parameter(description = "Target time ISO-8601 SGT. Defaults to latest snapshot.", example = "2025-01-15T08:30:00+08:00")
             @RequestParam(required = false) @Iso8601Sgt String datetime) {
         log.info("GET /nearest - lat={}, lon={}, limit={}, datetime={}", lat, lon, limit, datetime);
-        return queryService.findNearest(lat, lon, limit, datetime).map(ApiResponse::ok);
+        return ApiResponse.ok(queryService.findNearest(lat, lon, limit, datetime));
     }
 
     /** 4.3 Count taxis in a named zone */
@@ -99,14 +98,14 @@ public class TaxiController {
             content = @Content(schema = @Schema(ref = "#/components/schemas/ErrorResponse")))
     })
     @GetMapping("/zone/count")
-    public Mono<ApiResponse<TaxiResponseData>> zoneCount(
+    public ApiResponse<TaxiResponseData> zoneCount(
             @Parameter(description = "Zone identifier, e.g. 'CBD', 'Changi'", example = "CBD")
             @RequestParam @NotBlank String zoneName,
 
             @Parameter(description = "Target time ISO-8601 SGT. Defaults to latest snapshot.", example = "2025-01-15T08:30:00+08:00")
             @RequestParam(required = false) @Iso8601Sgt String datetime) {
         log.info("GET /zone/count - zoneName={}, datetime={}", zoneName, datetime);
-        return queryService.countInZone(zoneName, datetime).map(ApiResponse::ok);
+        return ApiResponse.ok(queryService.countInZone(zoneName, datetime));
     }
 
     /** 4.4 Count taxis in a custom GeoJSON polygon */
@@ -118,13 +117,13 @@ public class TaxiController {
             content = @Content(schema = @Schema(ref = "#/components/schemas/ErrorResponse")))
     })
     @PostMapping(value = "/polygon/count", consumes = MediaType.APPLICATION_JSON_VALUE)
-    public Mono<ApiResponse<TaxiResponseData>> polygonCount(
+    public ApiResponse<TaxiResponseData> polygonCount(
             @io.swagger.v3.oas.annotations.parameters.RequestBody(
                 description = "GeoJSON Polygon geometry and optional target datetime",
                 required = true)
             @Valid @RequestBody TaxiPolygonRequest request) {
         log.info("POST /polygon/count - datetime={}", request.getDatetime());
-        return queryService.countInPolygon(request.getPolygon(), request.getDatetime()).map(ApiResponse::ok);
+        return ApiResponse.ok(queryService.countInPolygon(request.getPolygon(), request.getDatetime()));
     }
 
     /** 4.5 Count taxis near a named road/highway */
@@ -136,7 +135,7 @@ public class TaxiController {
             content = @Content(schema = @Schema(ref = "#/components/schemas/ErrorResponse")))
     })
     @GetMapping("/road/count")
-    public Mono<ApiResponse<TaxiResponseData>> roadCount(
+    public ApiResponse<TaxiResponseData> roadCount(
             @Parameter(description = "Road or highway name, e.g. 'PIE', 'Orchard Road'", example = "PIE")
             @RequestParam @NotBlank String roadName,
 
@@ -146,7 +145,7 @@ public class TaxiController {
             @Parameter(description = "Target time ISO-8601 SGT. Defaults to latest snapshot.", example = "2025-01-15T08:30:00+08:00")
             @RequestParam(required = false) @Iso8601Sgt String datetime) {
         log.info("GET /road/count - roadName={}, buffer_m={}, datetime={}", roadName, buffer_m, datetime);
-        return queryService.countNearRoad(roadName, buffer_m, datetime).map(ApiResponse::ok);
+        return ApiResponse.ok(queryService.countNearRoad(roadName, buffer_m, datetime));
     }
 
     /** 4.6 Count taxis along a custom route buffer */
@@ -158,13 +157,13 @@ public class TaxiController {
             content = @Content(schema = @Schema(ref = "#/components/schemas/ErrorResponse")))
     })
     @PostMapping(value = "/route/count", consumes = MediaType.APPLICATION_JSON_VALUE)
-    public Mono<ApiResponse<TaxiResponseData>> routeCount(
+    public ApiResponse<TaxiResponseData> routeCount(
             @io.swagger.v3.oas.annotations.parameters.RequestBody(
                 description = "GeoJSON LineString route, buffer distance, and optional target datetime",
                 required = true)
             @Valid @RequestBody TaxiRouteRequest request) {
         log.info("POST /route/count - buffer_m={}, datetime={}", request.getBufferM(), request.getDatetime());
-        return queryService.countAlongRoute(request.getRoute(), request.getBufferM(), request.getDatetime()).map(ApiResponse::ok);
+        return ApiResponse.ok(queryService.countAlongRoute(request.getRoute(), request.getBufferM(), request.getDatetime()));
     }
 
     /** 4.7 Historical snapshots in a time range */
@@ -178,7 +177,7 @@ public class TaxiController {
             content = @Content(schema = @Schema(ref = "#/components/schemas/ErrorResponse")))
     })
     @GetMapping("/history/snapshots")
-    public Mono<ApiResponse<TaxiResponseData>> historySnapshots(
+    public ApiResponse<TaxiResponseData> historySnapshots(
             @Parameter(description = "Start of range, ISO-8601 SGT", example = "2026-03-09T00:00:00+08:00", required = true)
             @RequestParam @Iso8601Sgt String start,
 
@@ -188,7 +187,7 @@ public class TaxiController {
             @Parameter(description = "Optional zone name to filter results to a specific area (e.g. 'Punggol', 'CBD', 'Changi'). When a location or area is mentioned in the query, pass its name here.", example = "Punggol")
             @RequestParam(required = false) String zone) {
         log.info("GET /history/snapshots - start={}, end={}, zone={}", start, end, zone);
-        return queryService.getHistory(start, end, zone).map(ApiResponse::ok);
+        return ApiResponse.ok(queryService.getHistory(start, end, zone));
     }
 
     /** 4.8 Recent activity timeline */
@@ -196,10 +195,10 @@ public class TaxiController {
                description = "Returns per-snapshot taxi positions across the last N minutes.")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success")
     @GetMapping("/history/recent")
-    public Mono<ApiResponse<TaxiResponseData>> recentActivity(
+    public ApiResponse<TaxiResponseData> recentActivity(
             @Parameter(description = "Look-back window in minutes", example = "15")
             @RequestParam(defaultValue = "15") @Positive @Max(1440) int minutes) {
         log.info("GET /history/recent - minutes={}", minutes);
-        return queryService.getRecentTimeline(minutes).map(ApiResponse::ok);
+        return ApiResponse.ok(queryService.getRecentTimeline(minutes));
     }
 }

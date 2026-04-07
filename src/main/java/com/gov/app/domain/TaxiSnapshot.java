@@ -1,12 +1,10 @@
 package com.gov.app.domain;
 
+import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import org.springframework.data.annotation.Id;
-import org.springframework.data.relational.core.mapping.Column;
-import org.springframework.data.relational.core.mapping.Table;
 
 import java.time.OffsetDateTime;
 
@@ -14,18 +12,20 @@ import java.time.OffsetDateTime;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@Table("taxi_snapshots")
+@Entity
+@Table(name = "taxi_snapshots")
 public class TaxiSnapshot {
 
     @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column("api_timestamp")
+    @Column(name = "api_timestamp")
     private OffsetDateTime apiTimestamp;
 
-    @Column("taxi_count")
+    @Column(name = "taxi_count")
     private int taxiCount;
 
-    @Column("fetched_at")
+    @Column(name = "fetched_at")
     private OffsetDateTime fetchedAt;
 }

@@ -17,10 +17,11 @@ import com.gov.app.repository.CameraSnapshotRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import reactor.core.publisher.Mono;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -32,101 +33,72 @@ public class TrafficImageQueryService {
     private final CameraAnalysisRepository analysisRepository;
     private final ExpresswayMapping expresswayMapping;
 
-    public Mono<CameraListAllResponse> listAllCameras() {
-        return cameraRepository.findAll().collectList()
-                .flatMap(cameras -> {
-                    Mono<Map<Long, CameraSnapshot>> snapshotsMono =
-                            snapshotRepository.findLatestPerCamera().collectMap(CameraSnapshot::getCameraId);
-                    Mono<Map<Long, CameraAnalysis>> analysisMono =
-                            analysisRepository.findAll().collectMap(CameraAnalysis::getCameraId);
-                    return Mono.zip(snapshotsMono, analysisMono)
-                            .map(t -> CameraListAllResponse.builder()
-                                    .cameras(toCameraDetails(cameras, t.getT1(), t.getT2()))
-                                    .build());
-                });
+    public CameraListAllResponse listAllCameras() {
+        List<Camera> cameras = cameraRepository.findAll();
+        Map<Long, CameraSnapshot> snapshots = snapshotRepository.findLatestPerCamera()
+                .stream().collect(Collectors.toMap(CameraSnapshot::getCameraId, s -> s));
+        Map<Long, CameraAnalysis> analyses = analysisRepository.findAll()
+                .stream().collect(Collectors.toMap(CameraAnalysis::getCameraId, a -> a));
+        return CameraListAllResponse.builder()
+                .cameras(toCameraDetails(cameras, snapshots, analyses))
+                .build();
     }
 
-    public Mono<CameraDetail> getCameraById(Long cameraId) {
-        return cameraRepository.findByCameraId(cameraId)
-                .switchIfEmpty(Mono.error(new NotFoundException("Camera not found: " + cameraId)))
-                .flatMap(camera -> {
-                    Mono<CameraSnapshot> snapshotMono =
-                            snapshotRepository.findTopByCameraIdOrderByTimestampDesc(cameraId)
-                                    .defaultIfEmpty(nullSnapshot());
-                    Mono<CameraAnalysis> analysisMono =
-                            analysisRepository.findByCameraId(cameraId)
-                                    .defaultIfEmpty(nullAnalysis());
-                    return Mono.zip(snapshotMono, analysisMono)
-                            .map(t -> toCameraDetail(camera,
-                                    isNull(t.getT1()) ? null : t.getT1(),
-                                    isNull(t.getT2()) ? null : t.getT2()));
-                });
+    public CameraDetail getCameraById(Long cameraId) {
+        Camera camera = cameraRepository.findByCameraId(cameraId)
+                .orElseThrow(() -> new NotFoundException("Camera not found: " + cameraId));
+        Optional<CameraSnapshot> snapshot = snapshotRepository.findTopByCameraIdOrderByTimestampDesc(cameraId);
+        Optional<CameraAnalysis> analysis = analysisRepository.findByCameraId(cameraId);
+        return toCameraDetail(camera, snapshot.orElse(null), analysis.orElse(null));
     }
 
-    public Mono<CameraListResponse> getCamerasByExpressway(String code) {
+    public CameraListResponse getCamerasByExpressway(String code) {
         ExpresswayMapping.Expressway expressway = expresswayMapping.getByCode(code);
         if (expressway == null) {
-            return Mono.error(new NotFoundException("Unknown expressway code: " + code));
+            throw new NotFoundException("Unknown expressway code: " + code);
         }
-
-        Long[] cameraIds = expressway.cameraIds().toArray(Long[]::new);
-        return cameraRepository.findByExpressway(code.toUpperCase()).collectList()
-                .flatMap(cameras -> {
-                    Mono<Map<Long, CameraSnapshot>> snapshotsMono =
-                            snapshotRepository.findLatestByCameraIds(cameraIds)
-                                    .collectMap(CameraSnapshot::getCameraId);
-                    Mono<Map<Long, CameraAnalysis>> analysisMono =
-                            analysisRepository.findByCameraIds(cameraIds)
-                                    .collectMap(CameraAnalysis::getCameraId);
-                    return Mono.zip(snapshotsMono, analysisMono)
-                            .map(t -> buildCameraList(code, expressway.name(), cameras, t.getT1(), t.getT2()));
-                });
+        List<Long> cameraIds = expressway.cameraIds();
+        List<Camera> cameras = cameraRepository.findByExpressway(code.toUpperCase());
+        Map<Long, CameraSnapshot> snapshots = snapshotRepository.findLatestByCameraIds(cameraIds)
+                .stream().collect(Collectors.toMap(CameraSnapshot::getCameraId, s -> s));
+        Map<Long, CameraAnalysis> analyses = analysisRepository.findByCameraIds(cameraIds)
+                .stream().collect(Collectors.toMap(CameraAnalysis::getCameraId, a -> a));
+        return buildCameraList(code, expressway.name(), cameras, snapshots, analyses);
     }
 
-    public Mono<SearchResponse> searchCameras(String keyword) {
-        return cameraRepository.searchByLocationName(keyword).collectList()
-                .flatMap(cameras -> {
-                    if (cameras.isEmpty()) {
-                        return Mono.just(SearchResponse.builder().query(keyword).cameras(List.of()).build());
-                    }
-                    Long[] cameraIds = cameras.stream().map(Camera::getCameraId).toArray(Long[]::new);
-                    Mono<Map<Long, CameraSnapshot>> snapshotsMono =
-                            snapshotRepository.findLatestByCameraIds(cameraIds)
-                                    .collectMap(CameraSnapshot::getCameraId);
-                    Mono<Map<Long, CameraAnalysis>> analysisMono =
-                            analysisRepository.findByCameraIds(cameraIds)
-                                    .collectMap(CameraAnalysis::getCameraId);
-                    return Mono.zip(snapshotsMono, analysisMono)
-                            .map(t -> SearchResponse.builder()
-                                    .query(keyword)
-                                    .cameras(toCameraDetails(cameras, t.getT1(), t.getT2()))
-                                    .build());
-                });
+    public SearchResponse searchCameras(String keyword) {
+        List<Camera> cameras = cameraRepository.searchByLocationName(keyword);
+        if (cameras.isEmpty()) {
+            return SearchResponse.builder().query(keyword).cameras(List.of()).build();
+        }
+        List<Long> cameraIds = cameras.stream().map(Camera::getCameraId).toList();
+        Map<Long, CameraSnapshot> snapshots = snapshotRepository.findLatestByCameraIds(cameraIds)
+                .stream().collect(Collectors.toMap(CameraSnapshot::getCameraId, s -> s));
+        Map<Long, CameraAnalysis> analyses = analysisRepository.findByCameraIds(cameraIds)
+                .stream().collect(Collectors.toMap(CameraAnalysis::getCameraId, a -> a));
+        return SearchResponse.builder()
+                .query(keyword)
+                .cameras(toCameraDetails(cameras, snapshots, analyses))
+                .build();
     }
 
-    public Mono<NearbyResponse> getNearbyCameras(double lat, double lng, int radius) {
-        return cameraRepository.findAll()
+    public NearbyResponse getNearbyCameras(double lat, double lng, int radius) {
+        List<Camera> cameras = cameraRepository.findAll().stream()
                 .filter(camera -> haversine(lat, lng,
                         camera.getLatitude().doubleValue(), camera.getLongitude().doubleValue()) <= radius)
-                .collectList()
-                .flatMap(cameras -> {
-                    if (cameras.isEmpty()) {
-                        return Mono.just(NearbyResponse.builder()
-                                .lat(lat).lng(lng).radius(radius).cameras(List.of()).build());
-                    }
-                    Long[] cameraIds = cameras.stream().map(Camera::getCameraId).toArray(Long[]::new);
-                    Mono<Map<Long, CameraSnapshot>> snapshotsMono =
-                            snapshotRepository.findLatestByCameraIds(cameraIds)
-                                    .collectMap(CameraSnapshot::getCameraId);
-                    Mono<Map<Long, CameraAnalysis>> analysisMono =
-                            analysisRepository.findByCameraIds(cameraIds)
-                                    .collectMap(CameraAnalysis::getCameraId);
-                    return Mono.zip(snapshotsMono, analysisMono)
-                            .map(t -> NearbyResponse.builder()
-                                    .lat(lat).lng(lng).radius(radius)
-                                    .cameras(toCameraDetails(cameras, t.getT1(), t.getT2()))
-                                    .build());
-                });
+                .toList();
+        if (cameras.isEmpty()) {
+            return NearbyResponse.builder().lat(lat).lng(lng).radius(radius).cameras(List.of()).build();
+        }
+        List<Long> cameraIds = cameras.stream().map(Camera::getCameraId).toList();
+        Map<Long, CameraSnapshot> snapshots = snapshotRepository.findLatestByCameraIds(cameraIds)
+                .stream().collect(Collectors.toMap(CameraSnapshot::getCameraId, s -> s));
+        Map<Long, CameraAnalysis> analyses = analysisRepository.findByCameraIds(cameraIds)
+                .stream().collect(Collectors.toMap(CameraAnalysis::getCameraId, a -> a));
+        return NearbyResponse.builder()
+                .lat(lat).lng(lng).radius(radius)
+                .cameras(toCameraDetails(cameras, snapshots, analyses))
+                .build();
     }
 
     private CameraListResponse buildCameraList(String code, String name,
@@ -179,23 +151,6 @@ public class TrafficImageQueryService {
         }
 
         return builder.build();
-    }
-
-    // Sentinel objects used with defaultIfEmpty to avoid null in Mono.zip
-    private static final Long NULL_SENTINEL_ID = -1L;
-
-    private CameraSnapshot nullSnapshot() {
-        return CameraSnapshot.builder().id(NULL_SENTINEL_ID).build();
-    }
-
-    private CameraAnalysis nullAnalysis() {
-        return CameraAnalysis.builder().id(NULL_SENTINEL_ID).build();
-    }
-
-    private boolean isNull(Object obj) {
-        if (obj instanceof CameraSnapshot s) return NULL_SENTINEL_ID.equals(s.getId());
-        if (obj instanceof CameraAnalysis a) return NULL_SENTINEL_ID.equals(a.getId());
-        return obj == null;
     }
 
     private double haversine(double lat1, double lon1, double lat2, double lon2) {

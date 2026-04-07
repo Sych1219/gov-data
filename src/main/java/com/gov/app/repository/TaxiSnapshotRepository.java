@@ -1,20 +1,20 @@
 package com.gov.app.repository;
 
 import com.gov.app.domain.TaxiSnapshot;
-import org.springframework.data.repository.reactive.ReactiveCrudRepository;
-import reactor.core.publisher.Flux;
-import reactor.core.publisher.Mono;
+import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.time.OffsetDateTime;
+import java.util.List;
+import java.util.Optional;
 
-public interface TaxiSnapshotRepository extends ReactiveCrudRepository<TaxiSnapshot, Long> {
+public interface TaxiSnapshotRepository extends JpaRepository<TaxiSnapshot, Long> {
 
     /** Latest snapshot overall (no datetime filter). */
-    Mono<TaxiSnapshot> findFirstByOrderByApiTimestampDesc();
+    Optional<TaxiSnapshot> findFirstByOrderByApiTimestampDesc();
 
     /** Latest snapshot at or before the given time. */
-    Mono<TaxiSnapshot> findTopByApiTimestampLessThanEqualOrderByApiTimestampDesc(OffsetDateTime time);
+    Optional<TaxiSnapshot> findTopByApiTimestampLessThanEqualOrderByApiTimestampDesc(OffsetDateTime time);
 
     /** All snapshots within a time window, oldest first. */
-    Flux<TaxiSnapshot> findByApiTimestampBetweenOrderByApiTimestampAsc(OffsetDateTime start, OffsetDateTime end);
+    List<TaxiSnapshot> findByApiTimestampBetweenOrderByApiTimestampAsc(OffsetDateTime start, OffsetDateTime end);
 }

@@ -15,8 +15,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.CacheControl;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import reactor.core.publisher.Mono;
 
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 @Tag(name = "Zones", description = "Available zone catalog for zone-based taxi queries")
@@ -34,19 +34,16 @@ public class ZoneController {
                     + "Filter by `?category=district`, `?category=road`, or `?category=highway`."
     )
     @GetMapping
-    public Mono<ApiResponse<ZoneListResponse>> listZones(
+    public ApiResponse<ZoneListResponse> listZones(
             @Parameter(description = "Optional category filter: district, road, or highway")
             @RequestParam(required = false) String category) {
-
-        var zones = category != null
+        List<Zone> zones = category != null
                 ? zoneRepository.findByCategory(category)
                 : zoneRepository.findAll();
-
-        return zones
+        List<ZoneListResponse.ZoneEntry> entries = zones.stream()
                 .map(z -> new ZoneListResponse.ZoneEntry(z.getName(), z.getCategory()))
-                .collectList()
-                .map(ZoneListResponse::new)
-                .map(ApiResponse::ok);
+                .toList();
+        return ApiResponse.ok(new ZoneListResponse(entries));
     }
 
     @Operation(
@@ -55,20 +52,17 @@ public class ZoneController {
                     "the canonical name, its category, and the recommended API endpoint to call."
     )
     @GetMapping("/resolve")
-    public Mono<ApiResponse<ZoneResolveResponse>> resolve(
+    public ApiResponse<ZoneResolveResponse> resolve(
             @Parameter(description = "Place name to resolve, e.g. 'AYE', 'CBD', 'Orchard Road'", example = "AYE")
             @RequestParam String name) {
-
-        return zoneRepository.findBestAnyMatch(name, 0.3)
-                .map(zone -> ZoneResolveResponse.builder()
-                        .name(zone.getName())
-                        .category(zone.getCategory())
-                        .suggestedEndpoint(suggestedEndpoint(zone))
-                        .build())
-                .switchIfEmpty(Mono.error(new NotFoundException(
-                        "No match found for '" + name + "'. " +
-                        "Check GET /api/v1/zones for all available names.")))
-                .map(ApiResponse::ok);
+        Zone zone = zoneRepository.findBestAnyMatch(name, 0.3)
+                .orElseThrow(() -> new NotFoundException(
+                        "No match found for '" + name + "'. Check GET /api/v1/zones for all available names."));
+        return ApiResponse.ok(ZoneResolveResponse.builder()
+                .name(zone.getName())
+                .category(zone.getCategory())
+                .suggestedEndpoint(suggestedEndpoint(zone))
+                .build());
     }
 
     @Operation(
@@ -78,29 +72,27 @@ public class ZoneController {
                     "This data is static — clients should cache it aggressively."
     )
     @GetMapping("/{name}/geometry")
-    public Mono<ResponseEntity<ApiResponse<ZoneGeometryData>>> getGeometry(
+    public ResponseEntity<ApiResponse<ZoneGeometryData>> getGeometry(
             @Parameter(description = "Zone name, e.g. 'tampines', 'aye', 'orchard-road'", example = "tampines")
             @PathVariable String name) {
-
-        return zoneRepository.findBestAnyMatch(name, 0.3)
-                .switchIfEmpty(Mono.error(new NotFoundException(
-                        "No zone found matching '" + name + "'. Check GET /api/v1/zones for all available names.")))
-                .flatMap(zone -> zoneRepository.findGeometryByName(zone.getName()))
-                .map(raw -> {
-                    try {
-                        var geometry = objectMapper.readTree(raw.geometryJson());
-                        var data = ZoneGeometryData.builder()
-                                .name(raw.name())
-                                .category(raw.category())
-                                .geometry(geometry)
-                                .build();
-                        return ResponseEntity.ok()
-                                .cacheControl(CacheControl.maxAge(1, TimeUnit.DAYS))
-                                .<ApiResponse<ZoneGeometryData>>body(ApiResponse.ok(data));
-                    } catch (Exception e) {
-                        throw new RuntimeException("Failed to parse zone geometry", e);
-                    }
-                });
+        Zone zone = zoneRepository.findBestAnyMatch(name, 0.3)
+                .orElseThrow(() -> new NotFoundException(
+                        "No zone found matching '" + name + "'. Check GET /api/v1/zones for all available names."));
+        ZoneRepository.ZoneGeometryJson raw = zoneRepository.findGeometryByName(zone.getName())
+                .orElseThrow(() -> new NotFoundException("Geometry not found for zone: " + zone.getName()));
+        try {
+            var geometry = objectMapper.readTree(raw.geometryJson());
+            var data = ZoneGeometryData.builder()
+                    .name(raw.name())
+                    .category(raw.category())
+                    .geometry(geometry)
+                    .build();
+            return ResponseEntity.ok()
+                    .cacheControl(CacheControl.maxAge(1, TimeUnit.DAYS))
+                    .body(ApiResponse.ok(data));
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to parse zone geometry", e);
+        }
     }
 
     private String suggestedEndpoint(Zone zone) {

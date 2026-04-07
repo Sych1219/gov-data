@@ -9,11 +9,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
-import org.springframework.web.reactive.function.client.WebClient;
-import reactor.core.publisher.Mono;
+import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientException;
 
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 /**
@@ -29,7 +27,7 @@ import java.util.*;
 public class ZoneSeedService {
 
     private final ZoneRepository zoneRepository;
-    private final WebClient.Builder webClientBuilder;
+    private final RestClient.Builder restClientBuilder;
     private final ObjectMapper objectMapper;
 
     @Value("${zone.seed.onemap.planning-areas-url:https://www.onemap.gov.sg/api/public/popapi/getAllPlanningarea}")
@@ -45,50 +43,43 @@ public class ZoneSeedService {
     private String overpassBbox;
 
     /** Entry point called by ZoneDataInitializer. Seeds zones if table is empty. */
-    public Mono<Void> seedIfEmpty() {
-        return zoneRepository.hasAnyZone()
-                .flatMap(hasData -> {
-                    if (hasData) {
-                        log.info("zones table already populated, skipping seed");
-                        return Mono.empty();
-                    }
-                    return loadAndInsert();
-                });
+    public void seedIfEmpty() {
+        if (zoneRepository.hasAnyZone()) {
+            log.info("zones table already populated, skipping seed");
+            return;
+        }
+        loadAndInsert();
     }
 
     /**
-     * Fetches districts (OneMap) and roads/highways (Overpass) in parallel,
+     * Fetches districts (OneMap) and roads/highways (Overpass) sequentially,
      * merges the results, and batch-inserts into the zones table.
      */
-    private Mono<Void> loadAndInsert() {
-        return Mono.zip(fetchFromOnemap(), fetchFromOverpass())
-                .map(t -> {
-                    List<ZoneSeedEntry> all = new ArrayList<>(t.getT1());
-                    all.addAll(t.getT2());
-                    return all;
-                })
-                .flatMapMany(zoneRepository::batchInsert)
-                .doOnNext(n -> log.debug("inserted {} zone row(s)", n))
-                .then()
-                .doOnSuccess(v -> log.info("zone seed complete"));
+    private void loadAndInsert() {
+        List<ZoneSeedEntry> all = new ArrayList<>();
+        all.addAll(fetchFromOnemap());
+        all.addAll(fetchFromOverpass());
+        zoneRepository.batchInsert(all);
+        log.info("zone seed complete");
     }
 
     // -------------------------------------------------------------------------
     // OneMap — district polygons
     // -------------------------------------------------------------------------
 
-    private Mono<List<ZoneSeedEntry>> fetchFromOnemap() {
-        WebClient client = webClientBuilder.build();
-        var requestSpec = client.get().uri(onemapUrl);
-        if (onemapToken != null && !onemapToken.isBlank()) {
-            requestSpec = requestSpec.header("Authorization", onemapToken);
+    private List<ZoneSeedEntry> fetchFromOnemap() {
+        try {
+            RestClient.RequestHeadersSpec<?> requestSpec = restClientBuilder.build()
+                    .get().uri(onemapUrl);
+            if (onemapToken != null && !onemapToken.isBlank()) {
+                requestSpec = requestSpec.header("Authorization", onemapToken);
+            }
+            String json = requestSpec.retrieve().body(String.class);
+            return parseOneMapDistricts(json);
+        } catch (RestClientException ex) {
+            log.error("OneMap HTTP request failed: {}", ex.getMessage());
+            return List.of();
         }
-        return requestSpec
-                .retrieve()
-                .bodyToMono(String.class)
-                .doOnError(ex -> log.error("OneMap HTTP request failed: {}", ex.getMessage()))
-                .map(this::parseOneMapDistricts)
-                .doOnError(ex -> log.error("OneMap response parsing failed: {}", ex.getMessage()));
     }
 
     private List<ZoneSeedEntry> parseOneMapDistricts(String json) {
@@ -125,44 +116,44 @@ public class ZoneSeedService {
 
     /**
      * Fetches all named expressways (highway=motorway) and arterial roads
-     * (highway=trunk|primary) from OSM Overpass API in parallel.
+     * (highway=trunk|primary) from OSM Overpass API sequentially.
      * On error: logs warning and returns empty list so district seeding is not blocked.
      */
-    private Mono<List<ZoneSeedEntry>> fetchFromOverpass() {
-        Mono<List<ZoneSeedEntry>> highways = fetchOverpassByType(
-                "[out:json];way[\"highway\"=\"motorway\"][\"name\"](" + overpassBbox + ");out geom;",
-                "highway");
-        Mono<List<ZoneSeedEntry>> roads = fetchOverpassByType(
-                "[out:json];way[\"highway\"~\"trunk|primary\"][\"name\"](" + overpassBbox + ");out geom;",
-                "road");
-        return Mono.zip(highways, roads)
-                .map(t -> {
-                    List<ZoneSeedEntry> all = new ArrayList<>(t.getT1());
-                    all.addAll(t.getT2());
-                    return all;
-                })
-                .onErrorResume(ex -> {
-                    log.warn("Overpass fetch failed: {}", ex.getMessage());
-                    return Mono.just(List.of());
-                });
+    private List<ZoneSeedEntry> fetchFromOverpass() {
+        try {
+            List<ZoneSeedEntry> all = new ArrayList<>();
+            all.addAll(fetchOverpassByType(
+                    "[out:json];way[\"highway\"=\"motorway\"][\"name\"](" + overpassBbox + ");out geom;",
+                    "highway"));
+            all.addAll(fetchOverpassByType(
+                    "[out:json];way[\"highway\"~\"trunk|primary\"][\"name\"](" + overpassBbox + ");out geom;",
+                    "road"));
+            return all;
+        } catch (Exception ex) {
+            log.warn("Overpass fetch failed: {}", ex.getMessage());
+            return List.of();
+        }
     }
 
     /**
      * POSTs one Overpass QL query, groups the returned ways by tags.name,
      * and builds one MULTILINESTRING WKT per named road.
      */
-    private Mono<List<ZoneSeedEntry>> fetchOverpassByType(String ql, String category) {
-        String body = "data=" + ql;
-        return webClientBuilder.build()
-                .post()
-                .uri(overpassUrl)
-                .contentType(MediaType.APPLICATION_FORM_URLENCODED)
-                .bodyValue(body)
-                .retrieve()
-                .bodyToMono(String.class)
-                .map(json -> parseOverpassResponse(json, category))
-                .doOnError(ex -> log.warn("Overpass query for category '{}' failed: {}", category, ex.getMessage()))
-                .onErrorReturn(List.of());
+    private List<ZoneSeedEntry> fetchOverpassByType(String ql, String category) {
+        try {
+            String body = "data=" + ql;
+            String json = restClientBuilder.build()
+                    .post()
+                    .uri(overpassUrl)
+                    .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                    .body(body)
+                    .retrieve()
+                    .body(String.class);
+            return parseOverpassResponse(json, category);
+        } catch (Exception ex) {
+            log.warn("Overpass query for category '{}' failed: {}", category, ex.getMessage());
+            return List.of();
+        }
     }
 
     /**

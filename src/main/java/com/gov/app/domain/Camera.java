@@ -1,12 +1,10 @@
 package com.gov.app.domain;
 
+import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import org.springframework.data.annotation.Id;
-import org.springframework.data.relational.core.mapping.Column;
-import org.springframework.data.relational.core.mapping.Table;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
@@ -15,29 +13,31 @@ import java.time.OffsetDateTime;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@Table("cameras")
+@Entity
+@Table(name = "cameras")
 public class Camera {
 
     @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-    
-    @Column("camera_id")
+
+    @Column(name = "camera_id")
     private Long cameraId;
 
     private BigDecimal latitude;
 
     private BigDecimal longitude;
 
-    @Column("location_name")
+    @Column(name = "location_name")
     private String locationName;
 
     private String expressway;
 
     private String resolution;
 
-    @Column("first_seen_at")
+    @Column(name = "first_seen_at")
     private OffsetDateTime firstSeenAt;
 
-    @Column("last_seen_at")
+    @Column(name = "last_seen_at")
     private OffsetDateTime lastSeenAt;
 }

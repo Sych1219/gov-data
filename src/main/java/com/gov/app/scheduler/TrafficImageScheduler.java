@@ -16,10 +16,6 @@ public class TrafficImageScheduler {
     @Scheduled(fixedDelayString = "${gov-api.traffic-image.fetch-interval-ms}")
     public void ingestSnapshots() {
         log.debug("Scheduler triggered: fetching traffic images");
-        trafficImageFetchService.fetchAndSave()
-                .subscribe(
-                        null,
-                        ex -> log.error("Traffic image fetch failed: {}", ex.getMessage())
-                );
+        trafficImageFetchService.fetchAndSave();
     }
 }

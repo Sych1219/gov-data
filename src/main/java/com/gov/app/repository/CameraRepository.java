@@ -1,17 +1,18 @@
 package com.gov.app.repository;
 
 import com.gov.app.domain.Camera;
-import org.springframework.data.r2dbc.repository.Query;
-import org.springframework.data.repository.reactive.ReactiveCrudRepository;
-import reactor.core.publisher.Flux;
-import reactor.core.publisher.Mono;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
 
-public interface CameraRepository extends ReactiveCrudRepository<Camera, Long> {
+import java.util.List;
+import java.util.Optional;
 
-    Mono<Camera> findByCameraId(Long cameraId);
+public interface CameraRepository extends JpaRepository<Camera, Long> {
 
-    Flux<Camera> findByExpressway(String expressway);
+    Optional<Camera> findByCameraId(Long cameraId);
 
-    @Query("SELECT * FROM cameras WHERE LOWER(location_name) LIKE LOWER(CONCAT('%', :keyword, '%'))")
-    Flux<Camera> searchByLocationName(String keyword);
+    List<Camera> findByExpressway(String expressway);
+
+    @Query("SELECT c FROM Camera c WHERE LOWER(c.locationName) LIKE LOWER(CONCAT('%', :keyword, '%'))")
+    List<Camera> searchByLocationName(String keyword);
 }

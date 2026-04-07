@@ -9,9 +9,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import reactor.core.publisher.Mono;
 
 import java.util.Arrays;
+import java.util.List;
 
 @Slf4j
 @Tag(name = "Vector Tiles", description = "Mapbox Vector Tile (MVT) endpoints for taxi positions")
@@ -36,7 +36,7 @@ public class TileController {
                       "The MVT layer name is 'taxis'. Tiles are immutable per snapshot (Cache-Control: max-age=300)."
     )
     @GetMapping(value = "/taxis/timeline/{z}/{x}/{y}.pbf", produces = "application/x-protobuf")
-    public Mono<ResponseEntity<byte[]>> getTimelineTile(
+    public ResponseEntity<byte[]> getTimelineTile(
             @Parameter(description = "Tile zoom level (0–22)", example = "12")
             @PathVariable int z,
 
@@ -52,16 +52,16 @@ public class TileController {
             @Parameter(description = "Optional zone name to filter positions to a named area", example = "cbd")
             @RequestParam(required = false) String zone) {
 
-        Long[] snapshotIds = Arrays.stream(snapshots.split(","))
+        List<Long> snapshotIds = Arrays.stream(snapshots.split(","))
                 .map(String::trim)
                 .map(Long::parseLong)
-                .toArray(Long[]::new);
+                .toList();
 
         log.info("GET /tiles/taxis/timeline/{}/{}/{}.pbf snapshots={} zone={}", z, x, y, snapshots, zone);
-        return tileService.fetchTimelineTile(snapshotIds, z, x, y, zone)
-                .map(bytes -> ResponseEntity.ok()
-                        .header(HttpHeaders.CONTENT_TYPE, "application/x-protobuf")
-                        .header(HttpHeaders.CACHE_CONTROL, "max-age=300")
-                        .body(bytes));
+        byte[] bytes = tileService.fetchTimelineTile(snapshotIds, z, x, y, zone);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_TYPE, "application/x-protobuf")
+                .header(HttpHeaders.CACHE_CONTROL, "max-age=300")
+                .body(bytes);
     }
 }

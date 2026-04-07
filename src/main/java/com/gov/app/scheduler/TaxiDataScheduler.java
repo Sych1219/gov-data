@@ -16,10 +16,6 @@ public class TaxiDataScheduler {
     @Scheduled(fixedDelayString = "${gov-api.taxi.fetch-interval-ms}")
     public void fetchTaxiData() {
         log.debug("Scheduler triggered: fetching taxi data");
-        taxiFetchService.fetchAndSave()
-                .subscribe(
-                        null,
-                        ex -> log.error("Taxi fetch failed: {}", ex.getMessage())
-                );
+        taxiFetchService.fetchAndSave();
     }
 }

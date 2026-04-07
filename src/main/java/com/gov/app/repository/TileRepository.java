@@ -1,11 +1,11 @@
 package com.gov.app.repository;
 
 import lombok.RequiredArgsConstructor;
-import org.springframework.r2dbc.core.DatabaseClient;
+import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
-import reactor.core.publisher.Mono;
 
-import java.nio.ByteBuffer;
+import java.util.List;
 
 /**
  * Repository for generating Mapbox Vector Tiles (MVT) from taxi_positions via PostGIS ST_AsMVT.
@@ -14,7 +14,7 @@ import java.nio.ByteBuffer;
 @RequiredArgsConstructor
 public class TileRepository {
 
-    private final DatabaseClient db;
+    private final NamedParameterJdbcTemplate jdbc;
 
     private static final String TIMELINE_TILE_SQL_WITH_ZONE = """
             SELECT ST_AsMVT(tile, 'taxis', 4096, 'geom') AS mvt
@@ -27,7 +27,7 @@ public class TileRepository {
                            4096, 256, true
                        ) AS geom
                 FROM taxi_positions tp
-                WHERE tp.snapshot_id = ANY(:snapshotIds)
+                WHERE tp.snapshot_id IN (:snapshotIds)
                   AND ST_Intersects(
                         tp.geog::geometry,
                         ST_Transform(ST_TileEnvelope(:z, :x, :y), 4326)
@@ -51,7 +51,7 @@ public class TileRepository {
                            4096, 256, true
                        ) AS geom
                 FROM taxi_positions tp
-                WHERE tp.snapshot_id = ANY(:snapshotIds)
+                WHERE tp.snapshot_id IN (:snapshotIds)
                   AND ST_Intersects(
                         tp.geog::geometry,
                         ST_Transform(ST_TileEnvelope(:z, :x, :y), 4326)
@@ -60,25 +60,25 @@ public class TileRepository {
             WHERE geom IS NOT NULL
             """;
 
-    public Mono<byte[]> fetchTimelineTile(Long[] snapshotIds, int z, int x, int y, String zone) {
-        DatabaseClient.GenericExecuteSpec spec = zone != null
-                ? db.sql(TIMELINE_TILE_SQL_WITH_ZONE)
-                        .bind("snapshotIds", snapshotIds)
-                        .bind("z", z).bind("x", x).bind("y", y)
-                        .bind("zone", zone)
-                : db.sql(TIMELINE_TILE_SQL_NO_ZONE)
-                        .bind("snapshotIds", snapshotIds)
-                        .bind("z", z).bind("x", x).bind("y", y);
+    public byte[] fetchTimelineTile(List<Long> snapshotIds, int z, int x, int y, String zone) {
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("snapshotIds", snapshotIds)
+                .addValue("z", z)
+                .addValue("x", x)
+                .addValue("y", y);
 
-        return spec
-                .map(row -> {
-                    ByteBuffer buf = row.get("mvt", ByteBuffer.class);
-                    if (buf == null) return new byte[0];
-                    byte[] bytes = new byte[buf.remaining()];
-                    buf.get(bytes);
-                    return bytes;
-                })
-                .one()
-                .defaultIfEmpty(new byte[0]);
+        String sql;
+        if (zone != null) {
+            sql = TIMELINE_TILE_SQL_WITH_ZONE;
+            params.addValue("zone", zone);
+        } else {
+            sql = TIMELINE_TILE_SQL_NO_ZONE;
+        }
+
+        List<byte[]> results = jdbc.query(sql, params, (rs, i) -> {
+            byte[] mvt = rs.getBytes("mvt");
+            return mvt != null ? mvt : new byte[0];
+        });
+        return results.isEmpty() ? new byte[0] : results.get(0);
     }
 }

@@ -4,7 +4,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.util.StringUtils;
-import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.client.RestClient;
 
 @Configuration
 public class WebClientConfig {
@@ -22,8 +22,8 @@ public class WebClientConfig {
     private String civicAppBaseUrl;
 
     @Bean
-    public WebClient taxiWebClient(WebClient.Builder builder) {
-        WebClient.Builder b = builder.baseUrl(baseUrl);
+    public RestClient taxiWebClient(RestClient.Builder builder) {
+        RestClient.Builder b = builder.baseUrl(baseUrl);
         if (StringUtils.hasText(apiKey)) {
             b = b.defaultHeader("x-api-key", apiKey);
         }
@@ -31,13 +31,12 @@ public class WebClientConfig {
     }
 
     @Bean
-    public WebClient trafficImageWebClient(WebClient.Builder builder) {
+    public RestClient trafficImageWebClient(RestClient.Builder builder) {
         return builder.baseUrl(trafficImageBaseUrl).build();
     }
 
     @Bean
-    public WebClient civicAppWebClient(WebClient.Builder builder) {
+    public RestClient civicAppWebClient(RestClient.Builder builder) {
         return builder.baseUrl(civicAppBaseUrl).build();
     }
-
 }
