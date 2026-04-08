@@ -53,6 +53,11 @@ public class GlobalExceptionHandler {
         return error(HttpStatus.BAD_REQUEST, "BAD_REQUEST", ex.getMessage(), null);
     }
 
+    @ExceptionHandler(ConflictException.class)
+    public ResponseEntity<ApiResponse<Void>> handleConflict(ConflictException ex) {
+        return error(HttpStatus.CONFLICT, "CONFLICT", ex.getMessage(), null);
+    }
+
     @ExceptionHandler(UpstreamException.class)
     public ResponseEntity<ApiResponse<Void>> handleUpstream(UpstreamException ex) {
         log.error("Upstream error ({}): {}", ex.getStatusCode(), ex.getMessage());

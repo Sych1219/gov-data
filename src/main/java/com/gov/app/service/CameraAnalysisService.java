@@ -1,13 +1,22 @@
 package com.gov.app.service;
 
+import com.gov.app.domain.CameraSnapshot;
+import com.gov.app.dto.request.StoreAnalysisRequest;
+import com.gov.app.dto.response.StoreAnalysisResponse;
 import com.gov.app.dto.upstream.CivicAppAnalysisResponse;
+import com.gov.app.exception.ConflictException;
+import com.gov.app.exception.NotFoundException;
 import com.gov.app.repository.CameraAnalysisRepository;
+import com.gov.app.repository.CameraRepository;
+import com.gov.app.repository.CameraSnapshotRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 
+import java.time.OffsetDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -20,6 +29,30 @@ public class CameraAnalysisService {
 
     private final RestClient civicAppWebClient;
     private final CameraAnalysisRepository analysisRepository;
+    private final CameraRepository cameraRepository;
+    private final CameraSnapshotRepository snapshotRepository;
+
+    public StoreAnalysisResponse storeAnalysis(Long cameraId, StoreAnalysisRequest req) {
+        cameraRepository.findByCameraId(cameraId)
+                .orElseThrow(() -> new NotFoundException("Camera not found: " + cameraId));
+
+        CameraSnapshot snapshot = snapshotRepository.findTopByCameraIdOrderByTimestampDesc(cameraId)
+                .orElseThrow(() -> new ConflictException(
+                        "No snapshot exists yet for camera " + cameraId + " — cannot store analysis"));
+
+        analysisRepository.upsert(
+                cameraId, snapshot.getId(),
+                req.getCongestion(), req.getVehicleDensity(),
+                req.getIncidents(), req.getWeather(), req.getRoadSurface(), req.getSummary()
+        );
+
+        String analyzedAt = OffsetDateTime.now().format(DateTimeFormatter.ISO_OFFSET_DATE_TIME);
+        log.info("Stored analysis for camera {} (snapshot {})", cameraId, snapshot.getId());
+        return StoreAnalysisResponse.builder()
+                .cameraId(cameraId)
+                .analyzedAt(analyzedAt)
+                .build();
+    }
 
     public void analyzeCamera(Long cameraId, Long snapshotId, String imageUrl, String locationName) {
         try {

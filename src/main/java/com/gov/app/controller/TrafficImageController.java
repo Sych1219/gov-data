@@ -1,16 +1,20 @@
 package com.gov.app.controller;
 
+import com.gov.app.dto.request.StoreAnalysisRequest;
 import com.gov.app.dto.response.ApiResponse;
 import com.gov.app.dto.response.CameraDetail;
 import com.gov.app.dto.response.CameraListAllResponse;
 import com.gov.app.dto.response.CameraListResponse;
 import com.gov.app.dto.response.NearbyResponse;
 import com.gov.app.dto.response.SearchResponse;
+import com.gov.app.dto.response.StoreAnalysisResponse;
+import com.gov.app.service.CameraAnalysisService;
 import com.gov.app.service.TrafficImageQueryService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
@@ -29,6 +33,7 @@ import org.springframework.web.bind.annotation.*;
 public class TrafficImageController {
 
     private final TrafficImageQueryService queryService;
+    private final CameraAnalysisService analysisService;
 
     @Operation(summary = "List all cameras with latest snapshot")
     @ApiResponses({
@@ -94,5 +99,22 @@ public class TrafficImageController {
             @RequestParam @NotBlank String q) {
         log.info("GET /api/cameras/search?q={}", q);
         return ApiResponse.ok(queryService.searchCameras(q));
+    }
+
+    @Operation(summary = "Store LLM vision analysis for a camera",
+               description = "Upserts an analysis result produced by civic-app into camera_analysis. Requires an existing snapshot.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Analysis stored"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Missing or invalid fields"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Camera not found"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "No snapshot exists yet for this camera")
+    })
+    @PostMapping("/{id}/analysis")
+    public ApiResponse<StoreAnalysisResponse> storeAnalysis(
+            @Parameter(description = "Camera ID, e.g. 1701", example = "1701")
+            @PathVariable Long id,
+            @Valid @RequestBody StoreAnalysisRequest request) {
+        log.info("POST /api/cameras/{}/analysis", id);
+        return ApiResponse.ok(analysisService.storeAnalysis(id, request));
     }
 }
