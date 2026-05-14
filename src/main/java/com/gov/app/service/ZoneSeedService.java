@@ -4,11 +4,13 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.gov.app.domain.ZoneSeedEntry;
 import com.gov.app.repository.ZoneRepository;
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
@@ -33,8 +35,24 @@ public class ZoneSeedService {
     @Value("${zone.seed.onemap.planning-areas-url:https://www.onemap.gov.sg/api/public/popapi/getAllPlanningarea}")
     private String onemapUrl;
 
+    @Value("${zone.seed.onemap.auth-url:https://www.onemap.gov.sg/api/auth/post/getToken}")
+    private String onemapAuthUrl;
+
     @Value("${zone.seed.onemap.token:}")
     private String onemapToken;
+
+    @Value("${zone.seed.onemap.email:}")
+    private String onemapEmail;
+
+    @Value("${zone.seed.onemap.password:}")
+    private String onemapPassword;
+
+    private volatile String cachedToken;
+
+    @PostConstruct
+    void init() {
+        this.cachedToken = onemapToken;
+    }
 
     @Value("${zone.seed.overpass.url:https://overpass-api.de/api/interpreter}")
     private String overpassUrl;
@@ -67,19 +85,55 @@ public class ZoneSeedService {
     // OneMap — district polygons
     // -------------------------------------------------------------------------
 
+    private String refreshOnemapToken() {
+        if (onemapEmail.isBlank() || onemapPassword.isBlank()) {
+            log.warn("OneMap credentials not configured, cannot refresh token");
+            return cachedToken;
+        }
+        try {
+            String json = restClientBuilder.build()
+                    .post()
+                    .uri(onemapAuthUrl)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(Map.of("email", onemapEmail, "password", onemapPassword))
+                    .retrieve()
+                    .body(String.class);
+            String token = objectMapper.readTree(json).path("access_token").asText("");
+            if (!token.isBlank()) {
+                cachedToken = token;
+                log.info("OneMap token refreshed successfully");
+            }
+        } catch (Exception ex) {
+            log.error("Failed to refresh OneMap token: {}", ex.getMessage());
+        }
+        return cachedToken;
+    }
+
     private List<ZoneSeedEntry> fetchFromOnemap() {
         try {
-            RestClient.RequestHeadersSpec<?> requestSpec = restClientBuilder.build()
-                    .get().uri(onemapUrl);
-            if (onemapToken != null && !onemapToken.isBlank()) {
-                requestSpec = requestSpec.header("Authorization", onemapToken);
+            return doFetchFromOnemap(cachedToken);
+        } catch (HttpClientErrorException.Unauthorized e) {
+            log.warn("OneMap token expired, refreshing and retrying...");
+            try {
+                return doFetchFromOnemap(refreshOnemapToken());
+            } catch (Exception ex) {
+                log.error("OneMap request failed after token refresh: {}", ex.getMessage());
+                return List.of();
             }
-            String json = requestSpec.retrieve().body(String.class);
-            return parseOneMapDistricts(json);
         } catch (RestClientException ex) {
             log.error("OneMap HTTP request failed: {}", ex.getMessage());
             return List.of();
         }
+    }
+
+    private List<ZoneSeedEntry> doFetchFromOnemap(String token) {
+        RestClient.RequestHeadersSpec<?> requestSpec = restClientBuilder.build()
+                .get().uri(onemapUrl);
+        if (token != null && !token.isBlank()) {
+            requestSpec = requestSpec.header("Authorization", token);
+        }
+        String json = requestSpec.retrieve().body(String.class);
+        return parseOneMapDistricts(json);
     }
 
     private List<ZoneSeedEntry> parseOneMapDistricts(String json) {
@@ -126,7 +180,7 @@ public class ZoneSeedService {
                     "[out:json];way[\"highway\"=\"motorway\"][\"name\"](" + overpassBbox + ");out geom;",
                     "highway"));
             all.addAll(fetchOverpassByType(
-                    "[out:json];way[\"highway\"~\"trunk|primary\"][\"name\"](" + overpassBbox + ");out geom;",
+                    "[out:json];way[\"highway\"~\"trunk|primary|secondary|tertiary\"][\"name\"](" + overpassBbox + ");out geom;",
                     "road"));
             return all;
         } catch (Exception ex) {
