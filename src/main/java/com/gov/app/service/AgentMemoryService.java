@@ -71,9 +71,11 @@ public class AgentMemoryService {
     }
 
     @Transactional(readOnly = true)
-    public List<AgentHintResponse> getHints(String agent) {
-        return hintRepo.findByAgentOrderBySeenCountDesc(agent)
-            .stream().map(this::toResponse).toList();
+    public List<AgentHintResponse> getHints(String agent, String status) {
+        List<AgentHint> hints = (status != null)
+            ? hintRepo.findByAgentAndStatusOrderBySeenCountDesc(agent, status)
+            : hintRepo.findByAgentOrderBySeenCountDesc(agent);
+        return hints.stream().map(this::toResponse).toList();
     }
 
     // ── Observations ──────────────────────────────────────────────────────────

@@ -38,11 +38,13 @@ public class AgentMemoryController {
         return ApiResponse.ok(null);
     }
 
-    @Operation(summary = "Get all hints for an agent")
+    @Operation(summary = "Get hints for an agent, optionally filtered by status")
     @GetMapping("/hints")
-    public ApiResponse<List<AgentHintResponse>> getHints(@RequestParam @NotBlank String agent) {
-        log.info("GET /hints - agent={}", agent);
-        return ApiResponse.ok(service.getHints(agent));
+    public ApiResponse<List<AgentHintResponse>> getHints(
+            @RequestParam @NotBlank String agent,
+            @RequestParam(required = false) String status) {
+        log.info("GET /hints - agent={}, status={}", agent, status);
+        return ApiResponse.ok(service.getHints(agent, status));
     }
 
     @Operation(summary = "Create a new hint")
