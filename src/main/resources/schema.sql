@@ -111,3 +111,44 @@ CREATE TABLE IF NOT EXISTS camera_analysis (
 
 CREATE INDEX IF NOT EXISTS idx_analysis_camera
     ON camera_analysis (camera_id);
+
+-- ── Agent memory: execution trajectories ─────────────────────────────────────
+CREATE TABLE IF NOT EXISTS agent_trajectories (
+    id          TEXT        PRIMARY KEY,
+    agent       TEXT        NOT NULL,
+    question    TEXT        NOT NULL,
+    events_json JSONB       NOT NULL,
+    iterations  INT         NOT NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- ── Agent memory: distilled hints ────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS agent_hints (
+    id             TEXT        PRIMARY KEY,
+    agent          TEXT        NOT NULL,
+    body           TEXT        NOT NULL,
+    status         TEXT        NOT NULL DEFAULT 'pending',
+    seen_count     INT         NOT NULL DEFAULT 0,
+    embedding_json TEXT,
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE agent_hints ADD COLUMN IF NOT EXISTS embedding_json TEXT;
+
+CREATE INDEX IF NOT EXISTS idx_agent_hints_agent_status
+    ON agent_hints (agent, status);
+
+-- ── Agent memory: per-run hint observations ───────────────────────────────────
+CREATE TABLE IF NOT EXISTS agent_hint_observations (
+    id           TEXT        PRIMARY KEY,
+    hint_id      TEXT        NOT NULL REFERENCES agent_hints(id),
+    request_id   TEXT        NOT NULL,
+    hint_present BOOLEAN     NOT NULL,
+    iterations   INT         NOT NULL,
+    success      BOOLEAN     NOT NULL,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_hint_obs_hint_id
+    ON agent_hint_observations (hint_id);
