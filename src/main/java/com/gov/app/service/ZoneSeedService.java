@@ -118,10 +118,12 @@ public class ZoneSeedService {
                 return doFetchFromOnemap(refreshOnemapToken());
             } catch (Exception ex) {
                 log.error("OneMap request failed after token refresh: {}", ex.getMessage());
+                log.info("Loaded 0 district(s) from OneMap");
                 return List.of();
             }
         } catch (RestClientException ex) {
             log.error("OneMap HTTP request failed: {}", ex.getMessage());
+            log.info("Loaded 0 district(s) from OneMap");
             return List.of();
         }
     }
