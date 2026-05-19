@@ -6,7 +6,6 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 
 @Data
@@ -24,9 +23,9 @@ public class Camera {
     @Column(name = "camera_id")
     private Long cameraId;
 
-    private BigDecimal latitude;
+    private double latitude;
 
-    private BigDecimal longitude;
+    private double longitude;
 
     @Column(name = "location_name")
     private String locationName;

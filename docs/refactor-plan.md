@@ -104,7 +104,7 @@ cameras.stream().map(c -> new CameraDetail(
 )).toList();
 ```
 
-**问题：** 随着摄像头数量增长，每次请求都要把全表数据加载进内存。
+**问题：** 当前实现发起 3 次独立查询，并在 Java 层手动拼接结果，逻辑分散且冗余。
 
 **建议方案：** 在 `CameraRepository`（或 `TileRepository`）层用 `LEFT JOIN` 一次性取出所需数据：
 

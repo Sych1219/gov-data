@@ -1,27 +1,18 @@
 package com.gov.app.service;
 
 import com.gov.app.config.ExpresswayMapping;
-import com.gov.app.domain.Camera;
-import com.gov.app.domain.CameraAnalysis;
-import com.gov.app.domain.CameraSnapshot;
 import com.gov.app.dto.response.CameraAnalysisDetail;
 import com.gov.app.dto.response.CameraDetail;
-import com.gov.app.dto.response.CameraListAllResponse;
-import com.gov.app.dto.response.CameraListResponse;
-import com.gov.app.dto.response.NearbyResponse;
-import com.gov.app.dto.response.SearchResponse;
+import com.gov.app.dto.response.CameraMeta;
+import com.gov.app.dto.response.CameraQueryResponse;
 import com.gov.app.exception.NotFoundException;
-import com.gov.app.repository.CameraAnalysisRepository;
+import com.gov.app.repository.CameraDetailProjection;
 import com.gov.app.repository.CameraRepository;
-import com.gov.app.repository.CameraSnapshotRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -29,138 +20,82 @@ import java.util.stream.Collectors;
 public class TrafficImageQueryService {
 
     private final CameraRepository cameraRepository;
-    private final CameraSnapshotRepository snapshotRepository;
-    private final CameraAnalysisRepository analysisRepository;
     private final ExpresswayMapping expresswayMapping;
 
-    public CameraListAllResponse listAllCameras() {
-        List<Camera> cameras = cameraRepository.findAll();
-        Map<Long, CameraSnapshot> snapshots = snapshotRepository.findLatestPerCamera()
-                .stream().collect(Collectors.toMap(CameraSnapshot::getCameraId, s -> s));
-        Map<Long, CameraAnalysis> analyses = analysisRepository.findAll()
-                .stream().collect(Collectors.toMap(CameraAnalysis::getCameraId, a -> a));
-        return CameraListAllResponse.builder()
-                .cameras(toCameraDetails(cameras, snapshots, analyses))
+    public CameraQueryResponse listAllCameras() {
+        List<CameraDetail> cameras = toDetails(cameraRepository.findAllWithDetails());
+        return CameraQueryResponse.builder()
+                .cameras(cameras)
+                .meta(CameraMeta.builder().count(cameras.size()).build())
                 .build();
     }
 
     public CameraDetail getCameraById(Long cameraId) {
-        Camera camera = cameraRepository.findByCameraId(cameraId)
+        return cameraRepository.findByIdWithDetails(cameraId)
+                .map(this::toDetail)
                 .orElseThrow(() -> new NotFoundException("Camera not found: " + cameraId));
-        Optional<CameraSnapshot> snapshot = snapshotRepository.findTopByCameraIdOrderByTimestampDesc(cameraId);
-        Optional<CameraAnalysis> analysis = analysisRepository.findByCameraId(cameraId);
-        return toCameraDetail(camera, snapshot.orElse(null), analysis.orElse(null));
     }
 
-    public CameraListResponse getCamerasByExpressway(String code) {
-        ExpresswayMapping.Expressway expressway = expresswayMapping.getByCode(code);
-        if (expressway == null) {
+    public CameraQueryResponse getCamerasByExpressway(String code) {
+        if (expresswayMapping.getByCode(code) == null) {
             throw new NotFoundException("Unknown expressway code: " + code);
         }
-        List<Long> cameraIds = expressway.cameraIds();
-        List<Camera> cameras = cameraRepository.findByExpressway(code.toUpperCase());
-        Map<Long, CameraSnapshot> snapshots = snapshotRepository.findLatestByCameraIds(cameraIds)
-                .stream().collect(Collectors.toMap(CameraSnapshot::getCameraId, s -> s));
-        Map<Long, CameraAnalysis> analyses = analysisRepository.findByCameraIds(cameraIds)
-                .stream().collect(Collectors.toMap(CameraAnalysis::getCameraId, a -> a));
-        return buildCameraList(code, expressway.name(), cameras, snapshots, analyses);
-    }
-
-    public SearchResponse searchCameras(String keyword) {
-        List<Camera> cameras = cameraRepository.searchByLocationName(keyword);
-        if (cameras.isEmpty()) {
-            return SearchResponse.builder().query(keyword).cameras(List.of()).build();
-        }
-        List<Long> cameraIds = cameras.stream().map(Camera::getCameraId).toList();
-        Map<Long, CameraSnapshot> snapshots = snapshotRepository.findLatestByCameraIds(cameraIds)
-                .stream().collect(Collectors.toMap(CameraSnapshot::getCameraId, s -> s));
-        Map<Long, CameraAnalysis> analyses = analysisRepository.findByCameraIds(cameraIds)
-                .stream().collect(Collectors.toMap(CameraAnalysis::getCameraId, a -> a));
-        return SearchResponse.builder()
-                .query(keyword)
-                .cameras(toCameraDetails(cameras, snapshots, analyses))
+        List<CameraDetail> cameras = toDetails(
+                cameraRepository.findByExpresswayWithDetails(code.toUpperCase()));
+        return CameraQueryResponse.builder()
+                .cameras(cameras)
+                .meta(CameraMeta.builder().expressway(code.toUpperCase()).count(cameras.size()).build())
                 .build();
     }
 
-    public NearbyResponse getNearbyCameras(double lat, double lng, int radius) {
-        List<Camera> cameras = cameraRepository.findAll().stream()
-                .filter(camera -> haversine(lat, lng,
-                        camera.getLatitude().doubleValue(), camera.getLongitude().doubleValue()) <= radius)
-                .toList();
-        if (cameras.isEmpty()) {
-            return NearbyResponse.builder().lat(lat).lng(lng).radius(radius).cameras(List.of()).build();
-        }
-        List<Long> cameraIds = cameras.stream().map(Camera::getCameraId).toList();
-        Map<Long, CameraSnapshot> snapshots = snapshotRepository.findLatestByCameraIds(cameraIds)
-                .stream().collect(Collectors.toMap(CameraSnapshot::getCameraId, s -> s));
-        Map<Long, CameraAnalysis> analyses = analysisRepository.findByCameraIds(cameraIds)
-                .stream().collect(Collectors.toMap(CameraAnalysis::getCameraId, a -> a));
-        return NearbyResponse.builder()
-                .lat(lat).lng(lng).radius(radius)
-                .cameras(toCameraDetails(cameras, snapshots, analyses))
+    public CameraQueryResponse searchCameras(String keyword) {
+        List<CameraDetail> cameras = toDetails(
+                cameraRepository.searchByLocationNameWithDetails(keyword));
+        return CameraQueryResponse.builder()
+                .cameras(cameras)
+                .meta(CameraMeta.builder().query(keyword).count(cameras.size()).build())
                 .build();
     }
 
-    private CameraListResponse buildCameraList(String code, String name,
-                                                List<Camera> cameras,
-                                                Map<Long, CameraSnapshot> snapshots,
-                                                Map<Long, CameraAnalysis> analyses) {
-        List<CameraDetail> details = cameras.stream()
-                .map(cam -> toCameraDetail(cam, snapshots.get(cam.getCameraId()), analyses.get(cam.getCameraId())))
-                .toList();
-        return CameraListResponse.builder()
-                .expressway(code)
-                .name(name)
-                .camerasOnline(snapshots.size())
-                .camerasTotal(cameras.size())
-                .cameras(details)
+    public CameraQueryResponse getNearbyCameras(double lat, double lng, int radius) {
+        List<CameraDetail> cameras = toDetails(
+                cameraRepository.findNearbyWithDetails(lat, lng, radius));
+        return CameraQueryResponse.builder()
+                .cameras(cameras)
+                .meta(CameraMeta.builder().lat(lat).lng(lng).radius(radius).count(cameras.size()).build())
                 .build();
     }
 
-    private List<CameraDetail> toCameraDetails(List<Camera> cameras,
-                                                Map<Long, CameraSnapshot> snapshots,
-                                                Map<Long, CameraAnalysis> analyses) {
-        return cameras.stream()
-                .map(cam -> toCameraDetail(cam, snapshots.get(cam.getCameraId()), analyses.get(cam.getCameraId())))
-                .toList();
+    private List<CameraDetail> toDetails(List<CameraDetailProjection> rows) {
+        return rows.stream().map(this::toDetail).toList();
     }
 
-    private CameraDetail toCameraDetail(Camera camera, CameraSnapshot snapshot, CameraAnalysis analysis) {
+    private CameraDetail toDetail(CameraDetailProjection p) {
         CameraDetail.CameraDetailBuilder builder = CameraDetail.builder()
-                .cameraId(camera.getCameraId())
-                .locationName(camera.getLocationName())
-                .latitude(camera.getLatitude().doubleValue())
-                .longitude(camera.getLongitude().doubleValue())
-                .resolution(camera.getResolution());
+                .cameraId(p.getCameraId())
+                .locationName(p.getLocationName())
+                .latitude(p.getLatitude())
+                .longitude(p.getLongitude())
+                .resolution(p.getResolution());
 
-        if (snapshot != null) {
-            builder.latestImage(snapshot.getImageUrl())
-                    .timestamp(snapshot.getTimestamp().toString());
+        if (p.getImageUrl() != null) {
+            builder.latestImage(p.getImageUrl())
+                    .timestamp(p.getSnapshotTimestamp() != null
+                            ? p.getSnapshotTimestamp().toString() : null);
         }
 
-        if (analysis != null) {
+        if (p.getCongestion() != null) {
             builder.analysis(CameraAnalysisDetail.builder()
-                    .congestion(analysis.getCongestion())
-                    .vehicleDensity(analysis.getVehicleDensity())
-                    .incidents(analysis.getIncidents())
-                    .weather(analysis.getWeather())
-                    .roadSurface(analysis.getRoadSurface())
-                    .summary(analysis.getSummary())
-                    .analyzedAt(analysis.getAnalyzedAt().toString())
+                    .congestion(p.getCongestion())
+                    .vehicleDensity(p.getVehicleDensity())
+                    .incidents(p.getIncidents())
+                    .weather(p.getWeather())
+                    .roadSurface(p.getRoadSurface())
+                    .summary(p.getSummary())
+                    .analyzedAt(p.getAnalyzedAt() != null ? p.getAnalyzedAt().toString() : null)
                     .build());
         }
 
         return builder.build();
-    }
-
-    private double haversine(double lat1, double lon1, double lat2, double lon2) {
-        double R = 6371000;
-        double dLat = Math.toRadians(lat2 - lat1);
-        double dLon = Math.toRadians(lon2 - lon1);
-        double a = Math.sin(dLat / 2) * Math.sin(dLat / 2)
-                + Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2))
-                * Math.sin(dLon / 2) * Math.sin(dLon / 2);
-        double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-        return R * c;
     }
 }

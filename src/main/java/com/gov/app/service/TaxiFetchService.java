@@ -25,26 +25,38 @@ public class TaxiFetchService {
     private final TaxiSnapshotRepository snapshotRepository;
     private final TaxiPositionRepository positionRepository;
 
-    /**
-     * Fetches the latest taxi availability from data.gov.sg, persists a snapshot,
-     * and batch-inserts all taxi positions.
-     */
+    private static final int MAX_RETRIES = 3;
+
     public void fetchAndSave() {
-        GovTaxiResponse response;
-        try {
-            response = taxiWebClient.get()
-                    .uri(TAXI_PATH)
-                    .retrieve()
-                    .body(GovTaxiResponse.class);
-        } catch (RestClientException ex) {
-            log.error("Failed to fetch taxi data: {}", ex.getMessage());
-            return;
-        }
-        if (response == null) {
-            log.warn("Taxi API returned null response — skipping");
-            return;
-        }
+        GovTaxiResponse response = fetchWithRetry();
+        if (response == null) return;
         persist(response);
+    }
+
+    private GovTaxiResponse fetchWithRetry() {
+        Exception lastException = null;
+        for (int attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+            try {
+                return taxiWebClient.get()
+                        .uri(TAXI_PATH)
+                        .retrieve()
+                        .body(GovTaxiResponse.class);
+            } catch (RestClientException ex) {
+                lastException = ex;
+                if (attempt < MAX_RETRIES) {
+                    long sleepMs = (long) Math.pow(2, attempt) * 1000L;
+                    try {
+                        Thread.sleep(sleepMs);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        break;
+                    }
+                }
+            }
+        }
+        log.error("Failed to fetch taxi data after {} retries: {}",
+                MAX_RETRIES, lastException != null ? lastException.getMessage() : "unknown");
+        return null;
     }
 
     private void persist(GovTaxiResponse response) {

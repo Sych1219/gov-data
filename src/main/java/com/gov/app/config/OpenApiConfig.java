@@ -20,10 +20,10 @@ public class OpenApiConfig {
     public OpenAPI openAPI() {
         return new OpenAPI()
                 .info(new Info()
-                        .title("Taxi Availability API")
+                        .title("Singapore Gov Data API")
                         .version("v1")
                         .description("""
-                                Real-time and historical Singapore taxi availability.
+                                Real-time Singapore government data: taxi availability, traffic cameras, zones and map tiles.
                                 All datetime parameters accept ISO-8601 in SGT (UTC+8).
                                 Latest snapshot is used when datetime is omitted.
                                 """)

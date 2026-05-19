@@ -12,7 +12,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
-import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.Optional;
 
@@ -96,8 +95,8 @@ public class TrafficImageFetchService {
         Optional<Camera> existing = cameraRepository.findByCameraId(cameraId);
         if (existing.isPresent()) {
             Camera camera = existing.get();
-            camera.setLatitude(BigDecimal.valueOf(cam.getLocation().getLatitude()));
-            camera.setLongitude(BigDecimal.valueOf(cam.getLocation().getLongitude()));
+            camera.setLatitude(cam.getLocation().getLatitude());
+            camera.setLongitude(cam.getLocation().getLongitude());
             camera.setLastSeenAt(now);
             if (cam.getImageMetadata() != null) {
                 camera.setResolution(resolveResolution(cam.getImageMetadata().getWidth()));
@@ -107,8 +106,8 @@ public class TrafficImageFetchService {
             String expressway = expresswayMapping.resolveExpressway(cameraId);
             Camera camera = Camera.builder()
                     .cameraId(cameraId)
-                    .latitude(BigDecimal.valueOf(cam.getLocation().getLatitude()))
-                    .longitude(BigDecimal.valueOf(cam.getLocation().getLongitude()))
+                    .latitude(cam.getLocation().getLatitude())
+                    .longitude(cam.getLocation().getLongitude())
                     .expressway(expressway)
                     .resolution(cam.getImageMetadata() != null
                             ? resolveResolution(cam.getImageMetadata().getWidth()) : null)

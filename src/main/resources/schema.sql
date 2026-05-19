@@ -70,14 +70,20 @@ CREATE INDEX IF NOT EXISTS idx_zones_geog
 CREATE TABLE IF NOT EXISTS cameras (
     id              BIGSERIAL PRIMARY KEY,
     camera_id       BIGINT NOT NULL UNIQUE,
-    latitude        DECIMAL(12, 8) NOT NULL,
-    longitude       DECIMAL(12, 8) NOT NULL,
+    latitude        FLOAT8 NOT NULL,
+    longitude       FLOAT8 NOT NULL,
     location_name   VARCHAR(255),
     expressway      VARCHAR(50),
     resolution      VARCHAR(20),
     first_seen_at   TIMESTAMPTZ,
-    last_seen_at    TIMESTAMPTZ
+    last_seen_at    TIMESTAMPTZ,
+    geog            GEOGRAPHY(POINT, 4326)
+                        GENERATED ALWAYS AS (
+                            ST_SetSRID(ST_MakePoint(longitude, latitude), 4326)::geography
+                        ) STORED
 );
+
+CREATE INDEX IF NOT EXISTS idx_cameras_geog ON cameras USING GIST (geog);
 
 -- ── Camera snapshots (latest image per camera) ──────────────────────────────
 CREATE TABLE IF NOT EXISTS camera_snapshots (
